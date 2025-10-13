@@ -82,7 +82,6 @@ router.post('/', async (req, res) => {
           "Adaptez le vocabulaire à la tranche d'âge sans infantiliser."+
           "Toujours respecter le texte et éviter les interprétations hasardeuses."+
           "Structure: 1) Résumé 3–5 phrases; 2) Idée clé; 3) Deux questions; 4) Petite prière." +
-          "Citez la référence biblique si fournie (ex. Lc 15, 1-7)."+
           "Expliquez comment lire les versets et se repérer dans la Bible." +
           "Langue: français ; style simple, digne et clair; vouvoyez l'usager."
         },
