@@ -111,6 +111,8 @@ try {
   console.log('✅ Route /api/enfants chargée');
 } catch (e) { console.log('⚠️ Route enfants non disponible:', e.message); }
 
+app.use('/api',          require('./routes/feedback'));
+
 // Health simple
 app.get('/health', (_req, res) => res.json({ ok: true }));
 app.get('/', (_req, res) => res.send('🌿 Backend Ma Spiritualité (SQLite) est en ligne.'));
