@@ -3,3 +3,8 @@ node_modules/
 data/
 !data/liturgie.json
 
+backup-*.tgz
+data.sqlite
+*.bak
+curl
+{
