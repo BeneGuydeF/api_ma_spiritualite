@@ -49,9 +49,9 @@ function normalizeRubric(raw) {
 
 // ————— Init tables minimales au cas où (optionnel, idempotent) —————
 try {
-  db.prepare(`CREATE TABLE IF NOT EXISTS journal_entries (
+  db.prepare(`CREATE TABLE IF NOT EXISTS carnet_entries (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    userId INTEGER NOT NULL,
+    user_id INTEGER NOT NULL,
     titre TEXT NOT NULL,
     contenu TEXT NOT NULL,
     rubrique TEXT NOT NULL,
@@ -59,24 +59,24 @@ try {
     updated_at TEXT NOT NULL
   )`).run();
 } catch (e) {
-  console.warn('journal_entries table check failed:', e.message);
+  console.warn('carnet_entries table check failed:', e.message);
 }
 try {
-  db.prepare('CREATE INDEX IF NOT EXISTS idx_journal_user_created ON journal_entries(userId, created_at DESC)').run();
+  db.prepare('CREATE INDEX IF NOT EXISTS idx_journal_user_created ON carnet_entries(user_id, created_at DESC)').run();
 } catch (e) {
-  console.warn('journal_entries index check failed:', e.message);
+  console.warn('carnet_entries index check failed:', e.message);
 }
 // ————— Status crédits (pour flouter côté front) —————
 // GET /api/carnet/status  -> { credits: number, locked: boolean }
 router.get('/carnet/status', (req, res) => {
   try {
     const payload = verifyToken(req);
-    const userId = Number(payload?.sub ?? payload?.id ?? payload?.userId);
-    if (!Number.isFinite(userId)) return res.status(401).json({ error: 'token invalide' });
+    const user_id = Number(payload?.sub ?? payload?.id ?? payload?.user_id);
+    if (!Number.isFinite(user_id)) return res.status(401).json({ error: 'token invalide' });
 
     let credits = 0;
     try {
-      const row = db.prepare('SELECT credits FROM users WHERE id = ?').get(userId);
+      const row = db.prepare('SELECT credits FROM users WHERE id = ?').get(user_id);
       credits = row?.credits ?? 0;
     } catch {
       credits = 0;
@@ -95,8 +95,8 @@ router.get('/carnet/status', (req, res) => {
 router.post('/carnet/entries', (req, res) => {
   try {
     const payload = verifyToken(req);
-    const userId = Number(payload?.sub ?? payload?.id ?? payload?.userId);
-    if (!Number.isFinite(userId)) return res.status(401).json({ error: 'token invalide' });
+    const user_id = Number(payload?.sub ?? payload?.id ?? payload?.user_id);
+    if (!Number.isFinite(user_id)) return res.status(401).json({ error: 'token invalide' });
 
     const contenu = sanitize(req.body?.contenu);
     let titre = sanitize(req.body?.titre);
@@ -108,14 +108,14 @@ router.post('/carnet/entries', (req, res) => {
     if (!titre) titre = dateSlug(); // titre auto
 
     // (Optionnel) bloquer la création si crédits <= 0 :
-    // const creditsRow = db.prepare('SELECT credits FROM users WHERE id=?').get(userId);
+    // const creditsRow = db.prepare('SELECT credits FROM users WHERE id=?').get(user_id);
     // if (!creditsRow || creditsRow.credits <= 0) return res.status(402).json({ error: 'credits insuffisants' });
 
     const now = new Date().toISOString();
     const st = db.prepare(
-      'INSERT INTO journal_entries(userId, titre, contenu, rubrique, created_at, updated_at) VALUES (?,?,?,?,?,?)'
+      'INSERT INTO carnet_entries(user_id, titre, contenu, rubrique, created_at, updated_at) VALUES (?,?,?,?,?,?)'
     );
-    const result = st.run(userId, titre, contenu, rubrique, now, now);
+    const result = st.run(user_id, titre, contenu, rubrique, now, now);
 
     return res.status(201).json({
       id: result.lastInsertRowid,
@@ -134,8 +134,8 @@ router.post('/carnet/entries', (req, res) => {
 router.get('/carnet/entries', (req, res) => {
   try {
     const payload = verifyToken(req);
-    const userId = Number(payload?.sub ?? payload?.id ?? payload?.userId);
-    if (!Number.isFinite(userId)) return res.status(401).json({ error: 'token invalide' });
+    const user_id = Number(payload?.sub ?? payload?.id ?? payload?.user_id);
+    if (!Number.isFinite(user_id)) return res.status(401).json({ error: 'token invalide' });
 
     const rawRub = req.query.rubrique;
     const rubrique = rawRub ? normalizeRubric(rawRub) : null;
@@ -145,12 +145,12 @@ router.get('/carnet/entries', (req, res) => {
     let rows;
     if (rubrique && RUBRICS.has(rubrique)) {
       rows = db.prepare(
-        'SELECT id, titre, contenu, rubrique, created_at AS createdAt, updated_at AS updatedAt FROM journal_entries WHERE userId=? AND rubrique=? ORDER BY created_at DESC LIMIT ? OFFSET ?'
-      ).all(userId, rubrique, limit, offset);
+        'SELECT id, titre, contenu, rubrique, created_at AS createdAt, updated_at AS updatedAt FROM carnet_entries WHERE user_id=? AND rubrique=? ORDER BY created_at DESC LIMIT ? OFFSET ?'
+      ).all(user_id, rubrique, limit, offset);
     } else {
       rows = db.prepare(
-        'SELECT id, titre, contenu, rubrique, created_at AS createdAt, updated_at AS updatedAt FROM journal_entries WHERE userId=? ORDER BY created_at DESC LIMIT ? OFFSET ?'
-      ).all(userId, limit, offset);
+        'SELECT id, titre, contenu, rubrique, created_at AS createdAt, updated_at AS updatedAt FROM carnet_entries WHERE user_id=? ORDER BY created_at DESC LIMIT ? OFFSET ?'
+      ).all(user_id, limit, offset);
     }
 
     return res.json({ items: rows, limit, offset });
@@ -166,15 +166,15 @@ router.get('/carnet/entries', (req, res) => {
 router.get('/carnet/entries/:id', (req, res) => {
   try {
     const payload = verifyToken(req);
-    const userId = Number(payload?.sub ?? payload?.id ?? payload?.userId);
-    if (!Number.isFinite(userId)) return res.status(401).json({ error: 'token invalide' });
+    const user_id = Number(payload?.sub ?? payload?.id ?? payload?.user_id);
+    if (!Number.isFinite(user_id)) return res.status(401).json({ error: 'token invalide' });
 
     const id = Number(req.params.id);
     if (!Number.isFinite(id)) return res.status(400).json({ error: 'id invalide' });
 
     const row = db.prepare(
-      'SELECT id, titre, contenu, rubrique, created_at AS createdAt, updated_at AS updatedAt FROM journal_entries WHERE id=? AND userId=?'
-    ).get(id, userId);
+      'SELECT id, titre, contenu, rubrique, created_at AS createdAt, updated_at AS updatedAt FROM carnet_entries WHERE id=? AND user_id=?'
+    ).get(id, user_id);
 
     if (!row) return res.status(404).json({ error: 'introuvable' });
     return res.json(row);
@@ -190,8 +190,8 @@ router.get('/carnet/entries/:id', (req, res) => {
 router.put('/carnet/entries/:id', (req, res) => {
   try {
     const payload = verifyToken(req);
-    const userId = Number(payload?.sub ?? payload?.id ?? payload?.userId);
-    if (!Number.isFinite(userId)) return res.status(401).json({ error: 'token invalide' });
+    const user_id = Number(payload?.sub ?? payload?.id ?? payload?.user_id);
+    if (!Number.isFinite(user_id)) return res.status(401).json({ error: 'token invalide' });
 
     const id = Number(req.params.id);
     if (!Number.isFinite(id)) return res.status(400).json({ error: 'id invalide' });
@@ -202,7 +202,7 @@ router.put('/carnet/entries/:id', (req, res) => {
     const now = new Date().toISOString();
 
     // Vérifier ownership
-    const exists = db.prepare('SELECT id FROM journal_entries WHERE id=? AND userId=?').get(id, userId);
+    const exists = db.prepare('SELECT id FROM carnet_entries WHERE id=? AND user_id=?').get(id, user_id);
     if (!exists) return res.status(404).json({ error: 'introuvable' });
 
     // Construire l’update dynamiquement
@@ -216,14 +216,14 @@ router.put('/carnet/entries/:id', (req, res) => {
       fields.push('rubrique = ?'); vals.push(rub);
     }
     fields.push('updated_at = ?'); vals.push(now);
-    vals.push(id, userId);
+    vals.push(id, user_id);
 
-    const sql = `UPDATE journal_entries SET ${fields.join(', ')} WHERE id=? AND userId=?`;
+    const sql = `UPDATE carnet_entries SET ${fields.join(', ')} WHERE id=? AND user_id=?`;
     db.prepare(sql).run(...vals);
 
     const row = db.prepare(
-      'SELECT id, titre, contenu, rubrique, created_at AS createdAt, updated_at AS updatedAt FROM journal_entries WHERE id=? AND userId=?'
-    ).get(id, userId);
+      'SELECT id, titre, contenu, rubrique, created_at AS createdAt, updated_at AS updatedAt FROM carnet_entries WHERE id=? AND user_id=?'
+    ).get(id, user_id);
 
     return res.json(row);
   } catch (err) {
@@ -238,13 +238,13 @@ router.put('/carnet/entries/:id', (req, res) => {
 router.delete('/carnet/entries/:id', (req, res) => {
   try {
     const payload = verifyToken(req);
-    const userId = Number(payload?.sub ?? payload?.id ?? payload?.userId);
-    if (!Number.isFinite(userId)) return res.status(401).json({ error: 'token invalide' });
+    const user_id = Number(payload?.sub ?? payload?.id ?? payload?.user_id);
+    if (!Number.isFinite(user_id)) return res.status(401).json({ error: 'token invalide' });
 
     const id = Number(req.params.id);
     if (!Number.isFinite(id)) return res.status(400).json({ error: 'id invalide' });
 
-    const del = db.prepare('DELETE FROM journal_entries WHERE id=? AND userId=?').run(id, userId);
+    const del = db.prepare('DELETE FROM carnet_entries WHERE id=? AND user_id=?').run(id, user_id);
     if (del.changes === 0) return res.status(404).json({ error: 'introuvable' });
 
     return res.status(204).send();
@@ -263,13 +263,13 @@ router.post('/credits/use', (req, res) => {
     const token = auth.split(' ')[1]||'';
     if ((token === undefined) || (token === null) || (token === '')) return res.status(401).json({ error: 'token requis' });
     const payload = jwt.verify(token, process.env.JWT_SECRET);
-    const userId = Number(payload?.sub ?? payload?.id ?? payload?.userId);
-    if ((userId === undefined) || (userId === null) || Number.isNaN(userId) || userId === 0) return res.status(401).json({ error: 'token invalide' });
+    const user_id = Number(payload?.sub ?? payload?.id ?? payload?.user_id);
+    if ((user_id === undefined) || (user_id === null) || Number.isNaN(user_id) || user_id === 0) return res.status(401).json({ error: 'token invalide' });
 
     const amount = Math.max(0, Number((req.body && req.body.amount) || 1));
-    const row = db.prepare('SELECT credits FROM users WHERE id=?').get(userId) || { credits: 0 };
+    const row = db.prepare('SELECT credits FROM users WHERE id=?').get(user_id) || { credits: 0 };
     const next = Math.max(0, (row.credits||0) - amount);
-    db.prepare('UPDATE users SET credits=? WHERE id=?').run(next, userId);
+    db.prepare('UPDATE users SET credits=? WHERE id=?').run(next, user_id);
 
     return res.json({ ok:true, before: row.credits||0, used: amount, credits: next });
   } catch (e) {
@@ -282,14 +282,14 @@ router.post('/credits/use', (req, res) => {
 router.post("/credits/add", (req, res) => {
   try {
     const payload = verifyToken(req);
-    const userId = Number(payload?.sub ?? payload?.id ?? payload?.userId);
-    const valid = Number.isFinite(userId) && userId > 0;
+    const user_id = Number(payload?.sub ?? payload?.id ?? payload?.user_id);
+    const valid = Number.isFinite(user_id) && user_id > 0;
     if (!valid) return res.status(401).json({ error: "token invalide" });
 
     const amount = Math.max(0, Number((req.body && req.body.amount) || 0));
-    const row = db.prepare("SELECT credits FROM users WHERE id=?").get(userId) || { credits: 0 };
+    const row = db.prepare("SELECT credits FROM users WHERE id=?").get(user_id) || { credits: 0 };
     const next = (row.credits || 0) + amount;
-    db.prepare("UPDATE users SET credits=? WHERE id=?").run(next, userId);
+    db.prepare("UPDATE users SET credits=? WHERE id=?").run(next, user_id);
 
     return res.json({ ok: true, before: row.credits || 0, added: amount, credits: next });
   } catch (err) {
@@ -302,9 +302,9 @@ router.post("/credits/add", (req, res) => {
 router.get("/whoami", (req, res) => {
   try {
     const payload = verifyToken(req);
-    const userId = Number(payload?.sub ?? payload?.id ?? payload?.userId);
-    if (!Number.isFinite(userId)) return res.status(401).json({ error: "token invalide" });
-    const row = db.prepare("SELECT id, email, credits FROM users WHERE id=?").get(userId);
+    const user_id = Number(payload?.sub ?? payload?.id ?? payload?.user_id);
+    if (!Number.isFinite(user_id)) return res.status(401).json({ error: "token invalide" });
+    const row = db.prepare("SELECT id, email, credits FROM users WHERE id=?").get(user_id);
     if (!row) return res.status(404).json({ error: "introuvable" });
     return res.json({ user: row });
   } catch (err) {
