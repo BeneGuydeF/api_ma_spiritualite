@@ -1,116 +1,113 @@
-// routes/journal_secure.js — Carnet chiffré AES-256 moderne
-const express = require('express');
-const jwt = require('jsonwebtoken');
-const db = require('../db/sqlite');
-const {
-  encrypt,
-  decrypt,
-  deriveKey
-} = require('../utils/crypto');
+import express from "express";
+import { requireAuth, requireCredits, csrfProtection, loginRateLimit } from "../middleware/auth.js";
+import { logSecurityEvent } from "../utils/logger.js";
+import userRepo from "../models/user.repo.js";
+import db from "../db.js";
+import { decryptData } from "../utils/crypto.js"; // facultatif si déjà global
+import { validateEntry } from "../validators/journal.js"; // idem : optionnel selon ton schéma
 
 const router = express.Router();
-const JWT_SECRET = process.env.JWT_SECRET;
 
-// Vérification du token
-function verifyToken(req) {
-  const header = req.headers['authorization'] || '';
-  if (!header.startsWith('Bearer ')) {
-    const err = new Error('TOKEN_MISSING');
-    err.status = 401;
-    throw err;
-  }
-  const token = header.slice(7).trim();
+/**
+ * Vérifie la présence du secret JWT
+ */
+if (!process.env.JWT_SECRET) {
+  console.error("❌ JWT_SECRET manquant. Arrêt du module journal_secure.js");
+  process.exit(1);
+}
+
+/**
+ * Middlewares communs
+ * Authentification + protection CSRF + limitation brute-force
+ */
+router.use(requireAuth, csrfProtection, loginRateLimit);
+
+/**
+ * GET /api/journal_secure/whoami
+ * Retourne les informations basiques de l'utilisateur
+ */
+router.get("/whoami", async (req, res) => {
   try {
-    return jwt.verify(token, JWT_SECRET, {
-      issuer: 'ma-spiritualite-api',
-      audience: 'ma-spiritualite-app'
-    });
-  } catch (e) {
-    const err = new Error('TOKEN_INVALID');
-    err.status = 401;
-    throw err;
-  }
-}
-
-// Nettoyage basique
-function sanitize(s) {
-  return typeof s === 'string' ? s.trim().replace(/\u200B/g, '') : '';
-}
-
-// === CREATE ===
-router.post('/journal_secure/entries', (req, res) => {
-  try {
-    const payload = verifyToken(req);
-    const userId = Number(payload?.sub ?? payload?.id ?? payload?.userId);
-    if (!Number.isFinite(userId)) return res.status(401).json({ error: 'token invalide' });
-
-    const title = sanitize(req.body?.title || 'Sans titre');
-    const contenu = sanitize(req.body?.contenu || req.body?.content);
-    const tags = req.body?.tags || [];
-
-    if (!contenu) return res.status(422).json({ error: 'contenu requis' });
-
-    // Récupère le sel utilisateur depuis la base
-const user = db.prepare('SELECT encryptionSalt FROM users WHERE id=?').get(userId);
-if (!user || !user.encryptionSalt) {
-  throw new Error("Salt de chiffrement manquant pour cet utilisateur");
-}
-
-// Dérive une clé AES à partir du salt
-const key = deriveKey(user.encryptionSalt);
-
-// --- Chiffrement AES-256 via utils/crypto.js ---
-const { encryptedData, iv } = encrypt(contenu, key);
-const encryptedTags = encrypt(JSON.stringify(tags || []), key).encryptedData;
-const now = new Date().toISOString();
-
-const stmt = db.prepare(`
-  INSERT INTO carnet_entries (userId, title, encryptedContent, encryptedTags, iv, createdAt, updatedAt)
-  VALUES (?, ?, ?, ?, ?, ?, ?)
-`);
-const result = stmt.run(userId, title, encryptedData, encryptedTags, iv, now, now);
-
-return res.status(201).json({ id: result.lastInsertRowid, title, createdAt: now });
-
+    const user = await userRepo.getById(req.user.userId);
+    if (!user) return res.status(404).json({ error: "Utilisateur introuvable" });
+    res.json({ ok: true, user: { id: user.id, email: user.email, credits: user.credits } });
   } catch (err) {
-    console.error('POST /journal_secure/entries', err);
-    const status = err.status || 500;
-    return res.status(status).json({ error: err.message });
+    logSecurityEvent("whoami_failed", req.user.userId, err.message);
+    res.status(500).json({ error: "Erreur serveur" });
   }
 });
 
-// === READ (liste toutes les notes) ===
-router.get('/journal_secure/entries', (req, res) => {
+/**
+ * GET /api/journal_secure/credits
+ * Aligne la route avec le module carnet
+ */
+router.get("/credits", async (req, res) => {
   try {
-    const payload = verifyToken(req);
-    const userId = Number(payload?.sub ?? payload?.id ?? payload?.userId);
-    if (!Number.isFinite(userId)) return res.status(401).json({ error: 'token invalide' });
+    const user = await userRepo.getById(req.user.userId);
+    if (!user) return res.status(404).json({ error: "Utilisateur introuvable" });
+    res.json({ credits: user.credits });
+  } catch (err) {
+    res.status(500).json({ error: "Erreur lors de la récupération des crédits" });
+  }
+});
 
-    const user = db.prepare('SELECT encryptionSalt FROM users WHERE id=?').get(userId);
-    if (!user?.encryptionSalt) return res.status(500).json({ error: 'clé de chiffrement manquante' });
+/**
+ * POST /api/journal_secure/entries
+ * Enregistre une nouvelle entrée dans la table `journal_entries`
+ */
+router.post("/entries", requireCredits, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const { content, title, tags } = req.body;
 
-    const rows = db.prepare(`
-      SELECT id, title, encryptedContent, encryptedTags, iv, createdAt, updatedAt
-      FROM carnet_entries
-      WHERE userId=?
-      ORDER BY createdAt DESC
-    `).all(userId);
+    // Validation éventuelle
+    if (!content) return res.status(400).json({ error: "Contenu obligatoire" });
+    if (validateEntry && !validateEntry(req.body))
+      return res.status(400).json({ error: "Entrée invalide" });
 
-    const items = rows.map(r => ({
-      id: r.id,
-      title: r.title,
-      content: decryptData(r.encryptedContent, user.encryptionSalt, r.iv),
-      tags: JSON.parse(decryptData(r.encryptedTags, user.encryptionSalt, r.iv) || '[]'),
-      createdAt: r.createdAt,
-      updatedAt: r.updatedAt
+    await db.run(
+      `INSERT INTO journal_entries (user_id, title, content, tags, created_at)
+       VALUES (?, ?, ?, ?, datetime('now'))`,
+      [userId, title || null, content, tags ? JSON.stringify(tags) : null]
+    );
+
+    await db.run(
+      `UPDATE users SET credits = credits - 1 WHERE id = ?`,
+      [userId]
+    );
+
+    res.json({ ok: true, message: "Entrée enregistrée" });
+  } catch (err) {
+    logSecurityEvent("journal_entry_failed", req.user?.userId, err.message);
+    res.status(500).json({ error: "Erreur interne" });
+  }
+});
+
+/**
+ * GET /api/journal_secure/entries
+ * Lit les entrées depuis `journal_entries`
+ */
+router.get("/entries", async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const rows = await db.all(
+      `SELECT id, title, content, tags, created_at
+       FROM journal_entries WHERE user_id = ? ORDER BY created_at DESC`,
+      [userId]
+    );
+
+    // Déchiffrement éventuel
+    const entries = rows.map((r) => ({
+      ...r,
+      content: decryptData ? decryptData(r.content) : r.content,
+      tags: r.tags ? JSON.parse(r.tags) : [],
     }));
 
-    return res.json({ items });
+    res.json({ ok: true, entries });
   } catch (err) {
-    console.error('GET /journal_secure/entries', err);
-    const status = err.status || 500;
-    return res.status(status).json({ error: err.message });
+    logSecurityEvent("journal_read_failed", req.user?.userId, err.message);
+    res.status(500).json({ error: "Erreur lors de la lecture des entrées" });
   }
 });
 
-module.exports = router;
+export default router;
