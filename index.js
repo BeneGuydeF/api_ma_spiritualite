@@ -177,6 +177,8 @@ try {
   console.log('⚠️ Route feedback non disponible :', e.message);
 }
 
+app.use('/api', require('./routes/journal_secure'));
+
 try {
   const enfantsRoute = require('./routes/enfants');
   app.use('/api/enfants', enfantsRoute);
