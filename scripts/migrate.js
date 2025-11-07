@@ -1,50 +1,69 @@
-// scripts/migrate.js - Script de migration de la base de données
+// scripts/migrate.js - Migration complète (version bêta stable)
 const Database = require('better-sqlite3');
 const path = require('path');
+const { generateSalt } = require('../utils/crypto');
 const fs = require('fs');
 
 const DATA_DIR = path.join(__dirname, '..', 'data');
 const dbPath = path.join(DATA_DIR, 'ma_spiritualite.db');
 
-console.log('🔧 Début de la migration de la base de données...');
+console.log('🔧 Migration complète de la base de données Ma Spiritualité...');
 
-// Ouvrir la connexion à la base
+// Assurer le dossier data
+if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR);
+
 const db = new Database(dbPath);
 
 try {
-  // Vérifier les colonnes existantes dans la table users
-  const tableInfo = db.prepare("PRAGMA table_info(users)").all();
-  const existingColumns = tableInfo.map(col => col.name);
-  
-  console.log('📋 Colonnes existantes:', existingColumns);
-  
-  // Ajouter les colonnes manquantes si elles n'existent pas
-  if (!existingColumns.includes('credits')) {
-    console.log('➕ Ajout de la colonne credits...');
-    db.exec('ALTER TABLE users ADD COLUMN credits INTEGER DEFAULT 5');
+  // === TABLE UTILISATEURS ===
+  const userCols = db.prepare("PRAGMA table_info(users)").all().map(c => c.name);
+
+  if (!userCols.includes('credits')) {
+    console.log('➕ Ajout colonne credits à users...');
+    db.exec(`ALTER TABLE users ADD COLUMN credits INTEGER DEFAULT 5`);
   }
-  
-  if (!existingColumns.includes('encryptionSalt')) {
-    console.log('➕ Ajout de la colonne encryptionSalt...');
-    db.exec('ALTER TABLE users ADD COLUMN encryptionSalt TEXT');
+
+  if (!userCols.includes('encryptionSalt')) {
+    console.log('➕ Ajout colonne encryptionSalt à users...');
+    db.exec(`ALTER TABLE users ADD COLUMN encryptionSalt TEXT`);
   }
-  
-  // Créer les nouvelles tables si elles n'existent pas
-  console.log('📝 Création des nouvelles tables...');
-  
+
+  // === CARNET NON CHIFFRÉ (mode sans crédits) ===
   db.exec(`
-    CREATE TABLE IF NOT EXISTS journal_entries (
+    CREATE TABLE IF NOT EXISTS carnet_entries (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      userId INTEGER NOT NULL,
-      title TEXT,
-      encryptedContent TEXT NOT NULL,
-      encryptedTags TEXT,
-      iv TEXT NOT NULL,
-      createdAt TEXT NOT NULL,
-      updatedAt TEXT NOT NULL,
-      FOREIGN KEY (userId) REFERENCES users(id)
+      user_id INTEGER NOT NULL,
+      titre TEXT NOT NULL,
+      contenu TEXT NOT NULL,
+      rubrique TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY (user_id) REFERENCES users(id)
     );
-    
+    CREATE INDEX IF NOT EXISTS idx_carnet_user_created
+      ON carnet_entries(user_id, created_at DESC);
+  `);
+
+  // === CARNET CHIFFRÉ AES (journal sécurisé) ===
+ db.exec(`
+  CREATE TABLE IF NOT EXISTS journal_entries_secure (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    title TEXT NOT NULL,
+    encryptedContent TEXT NOT NULL,
+    encryptedTags TEXT,
+    iv TEXT NOT NULL,
+    tag TEXT NOT NULL, -- AuthTag pour AES-GCM
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    FOREIGN KEY (user_id) REFERENCES users(id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_secure_user_created
+    ON journal_entries_secure(user_id, created_at DESC);
+`);
+
+  // === TRANSACTIONS DE CRÉDITS ===
+  db.exec(`
     CREATE TABLE IF NOT EXISTS credit_transactions (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       userId INTEGER NOT NULL,
@@ -56,7 +75,10 @@ try {
       createdAt TEXT NOT NULL,
       FOREIGN KEY (userId) REFERENCES users(id)
     );
-    
+  `);
+
+  // === PAIEMENTS ===
+  db.exec(`
     CREATE TABLE IF NOT EXISTS payment_sessions (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       userId INTEGER NOT NULL,
@@ -70,39 +92,41 @@ try {
       FOREIGN KEY (userId) REFERENCES users(id)
     );
   `);
-  
-  // Mettre à jour les utilisateurs existants pour leur donner des crédits et un salt de chiffrement
-  const { generateSalt } = require('../utils/crypto');
+
+  // === DONATIONS ===
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS donations (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      userId INTEGER,
+      amount REAL NOT NULL,
+      message TEXT,
+      provider TEXT CHECK (provider IN ('stripe', 'paypal', 'autre')),
+      createdAt TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (userId) REFERENCES users(id)
+    );
+  `);
+
+  // === INITIALISATION DES UTILISATEURS ===
   const usersWithoutSalt = db.prepare('SELECT id FROM users WHERE encryptionSalt IS NULL').all();
-  
-  if (usersWithoutSalt.length > 0) {
-    console.log(`🔑 Génération des sels de chiffrement pour ${usersWithoutSalt.length} utilisateur(s)...`);
-    
-    const updateUserSalt = db.prepare('UPDATE users SET encryptionSalt = ? WHERE id = ?');
-    
-    for (const user of usersWithoutSalt) {
-      const salt = generateSalt();
-      updateUserSalt.run(salt, user.id);
-    }
+  const updateSalt = db.prepare('UPDATE users SET encryptionSalt = ? WHERE id = ?');
+  for (const user of usersWithoutSalt) {
+    updateSalt.run(generateSalt(), user.id);
   }
-  
-  // Mettre à jour les crédits pour les utilisateurs existants s'ils n'en ont pas
-  const usersWithoutCredits = db.prepare('SELECT id FROM users WHERE credits = 0 OR credits IS NULL').all();
-  
-  if (usersWithoutCredits.length > 0) {
-    console.log(`💰 Attribution de 5 crédits gratuits à ${usersWithoutCredits.length} utilisateur(s)...`);
-    
-    const updateUserCredits = db.prepare('UPDATE users SET credits = 5 WHERE id = ?');
-    
-    for (const user of usersWithoutCredits) {
-      updateUserCredits.run(user.id);
-    }
+
+  const usersWithoutCredits = db.prepare('SELECT id FROM users WHERE credits IS NULL OR credits = 0').all();
+  const updateCredits = db.prepare('UPDATE users SET credits = 5 WHERE id = ?');
+  for (const user of usersWithoutCredits) {
+    updateCredits.run(user.id);
   }
-  
-  console.log('✅ Migration terminée avec succès !');
-  
-} catch (error) {
-  console.error('❌ Erreur lors de la migration:', error);
+
+  console.log(`✅ Migration terminée avec succès.`);
+  console.log(`   - carnet_entries (non chiffré)`);
+  console.log(`   - journal_entries_secure (AES-256)`);
+  console.log(`   - credit_transactions / payment_sessions / donations`);
+  console.log(`   - users.credits + users.encryptionSalt`);
+
+} catch (err) {
+  console.error('❌ Erreur lors de la migration:', err);
   process.exit(1);
 } finally {
   db.close();
