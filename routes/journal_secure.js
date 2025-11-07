@@ -3,7 +3,6 @@ const {
   requireAuth,
   requireCredits,
   csrfProtection,
-  logSecurityEvent,
   sensitiveRateLimit,
 } = require('../middleware/auth');
 const userRepo = require('../models/user.repo');
@@ -24,12 +23,34 @@ if (!JWT_SECRET) {
   throw new Error('JWT_SECRET manquant : journal_secure indisponible');
 }
 
-const JOURNAL_ENCRYPTION_KEY = process.env.JOURNAL_ENCRYPTION_KEY || process.env.JWT_SECRET;
+const JOURNAL_ENCRYPTION_KEY = process.env.JOURNAL_ENCRYPTION_KEY;
 if (!JOURNAL_ENCRYPTION_KEY) {
-  throw new Error('JOURNAL_ENCRYPTION_KEY manquant pour journal_secure');
+  throw new Error(
+    'JOURNAL_ENCRYPTION_KEY manquant : définis une clé dédiée (>=32 caractères) pour le carnet sécurisé',
+  );
+}
+if (JOURNAL_ENCRYPTION_KEY.length < 32) {
+  throw new Error('JOURNAL_ENCRYPTION_KEY trop court : minimum 32 caractères requis');
 }
 
-router.use(requireAuth, csrfProtection, logSecurityEvent);
+function auditJournalAccess(req, res, next) {
+  const started = Date.now();
+  res.on('finish', () => {
+    const status = res.statusCode;
+    const shouldLog = status >= 400 || req.method === 'POST' || req.method === 'DELETE';
+    if (!shouldLog) return;
+
+    const userId = req.user?.id ?? 'anonymous';
+    console.warn(
+      `[journal_secure] ${req.method} ${req.originalUrl} -> ${status} (user=${userId}, duration=${
+        Date.now() - started
+      }ms)`,
+    );
+  });
+  next();
+}
+
+router.use(requireAuth, csrfProtection, auditJournalAccess);
 
 const sanitize = (value) => (typeof value === 'string' ? value.replace(/\u200B/g, '').trim() : '');
 
