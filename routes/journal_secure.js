@@ -1,128 +1,105 @@
-// routes/journal_secure.js — carnet chiffré AES-GCM
+// routes/journal_secure.js — Carnet chiffré AES-256 moderne
 const express = require('express');
 const jwt = require('jsonwebtoken');
 const db = require('../db/sqlite');
-const { encryptJSON, decryptJSON } = require('../utils/crypto');
+const { encryptData, decryptData } = require('../utils/crypto');
 
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET;
-if (!JWT_SECRET) throw new Error('JWT_SECRET manquant pour journal sécurisé');
 
-// === Vérification du token ===
+// Vérification du token
 function verifyToken(req) {
   const header = req.headers['authorization'] || '';
-  if (!header.startsWith('Bearer ')) throw new Error('TOKEN_MISSING');
+  if (!header.startsWith('Bearer ')) {
+    const err = new Error('TOKEN_MISSING');
+    err.status = 401;
+    throw err;
+  }
   const token = header.slice(7).trim();
-  return jwt.verify(token, JWT_SECRET, {
-    issuer: 'ma-spiritualite-api',
-    audience: 'ma-spiritualite-app'
-  });
+  try {
+    return jwt.verify(token, JWT_SECRET, {
+      issuer: 'ma-spiritualite-api',
+      audience: 'ma-spiritualite-app'
+    });
+  } catch (e) {
+    const err = new Error('TOKEN_INVALID');
+    err.status = 401;
+    throw err;
+  }
 }
 
-// === POST /api/journal_secure/entries ===
-// Enregistre une note chiffrée (si crédits > 0)
+// Nettoyage basique
+function sanitize(s) {
+  return typeof s === 'string' ? s.trim().replace(/\u200B/g, '') : '';
+}
+
+// === CREATE ===
 router.post('/journal_secure/entries', (req, res) => {
   try {
     const payload = verifyToken(req);
-    const user_id = payload.userId;
-    const user = db.prepare('SELECT encryptionSalt, credits FROM users WHERE id=?').get(user_id);
-    if (!user) return res.status(404).json({ error: 'Utilisateur introuvable' });
+    const userId = Number(payload?.sub ?? payload?.id ?? payload?.userId);
+    if (!Number.isFinite(userId)) return res.status(401).json({ error: 'token invalide' });
 
-    const { title, contenu, tags } = req.body;
+    const title = sanitize(req.body?.title || 'Sans titre');
+    const contenu = sanitize(req.body?.contenu || req.body?.content);
+    const tags = req.body?.tags || [];
+
     if (!contenu) return res.status(422).json({ error: 'contenu requis' });
 
-    // Mode éphémère si plus de crédits
-    if (user.credits <= 0) {
-      console.log('⚠️ Aucun crédit disponible — mode éphémère');
-      return res.json({ ephemeral: true, message: 'Note non sauvegardée (crédits épuisés)' });
-    }
+    // Récupération du sel utilisateur
+    const user = db.prepare('SELECT encryptionSalt FROM users WHERE id=?').get(userId);
+    if (!user?.encryptionSalt) return res.status(500).json({ error: 'clé de chiffrement manquante' });
 
+    // Chiffrement AES-256 via utils/crypto.js
+    const { encryptedData, iv } = encryptData(contenu, user.encryptionSalt);
+    const encryptedTags = encryptData(JSON.stringify(tags), user.encryptionSalt).encryptedData;
     const now = new Date().toISOString();
-    const data = { contenu, tags };
-    const encrypted = encryptJSON(data, JWT_SECRET, user.encryptionSalt);
 
-    db.prepare(`
-      INSERT INTO journal_entries_secure
-        (user_id, title, encryptedContent, encryptedTags, iv, tag, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      user_id,
-      title || '(sans titre)',
-      encrypted.encryptedData,
-      JSON.stringify(tags || []),
-      encrypted.iv,
-      encrypted.tag,
-      now,
-      now
-    );
+    const stmt = db.prepare(`
+      INSERT INTO carnet_entries (userId, title, encryptedContent, encryptedTags, iv, createdAt, updatedAt)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `);
+    const result = stmt.run(userId, title, encryptedData, encryptedTags, iv, now, now);
 
-    res.json({ ok: true, saved: true, createdAt: now });
+    return res.status(201).json({ id: result.lastInsertRowid, title, createdAt: now });
   } catch (err) {
-    console.error('POST /journal_secure/entries', err.message);
-    const msg = err.message.includes('TOKEN_MISSING')
-      ? 'token requis'
-      : err.message.includes('TOKEN_INVALID')
-      ? 'token invalide'
-      : err.message;
-    res.status(401).json({ error: msg });
+    console.error('POST /journal_secure/entries', err);
+    const status = err.status || 500;
+    return res.status(status).json({ error: err.message });
   }
 });
 
-// === GET /api/journal_secure/entries ===
-// Retourne toutes les notes déchiffrées
+// === READ (liste toutes les notes) ===
 router.get('/journal_secure/entries', (req, res) => {
   try {
     const payload = verifyToken(req);
-    const user_id = payload.userId;
-    const user = db.prepare('SELECT encryptionSalt FROM users WHERE id=?').get(user_id);
-    if (!user) return res.status(404).json({ error: 'Utilisateur introuvable' });
+    const userId = Number(payload?.sub ?? payload?.id ?? payload?.userId);
+    if (!Number.isFinite(userId)) return res.status(401).json({ error: 'token invalide' });
 
-    const rows = db
-      .prepare(`
-        SELECT id, title, encryptedContent, iv, tag, created_at, updated_at
-        FROM journal_entries_secure
-        WHERE user_id = ?
-        ORDER BY created_at DESC
-      `)
-      .all(user_id);
+    const user = db.prepare('SELECT encryptionSalt FROM users WHERE id=?').get(userId);
+    if (!user?.encryptionSalt) return res.status(500).json({ error: 'clé de chiffrement manquante' });
 
-    const decrypted = rows.map(row => {
-      try {
-        const data = decryptJSON(row.encryptedContent, row.iv, row.tag, JWT_SECRET, user.encryptionSalt);
-        return { ...row, contenu: data.contenu, tags: data.tags || [] };
-      } catch {
-        return { ...row, contenu: '(Déchiffrement impossible)' };
-      }
-    });
+    const rows = db.prepare(`
+      SELECT id, title, encryptedContent, encryptedTags, iv, createdAt, updatedAt
+      FROM carnet_entries
+      WHERE userId=?
+      ORDER BY createdAt DESC
+    `).all(userId);
 
-    res.json({ items: decrypted });
+    const items = rows.map(r => ({
+      id: r.id,
+      title: r.title,
+      content: decryptData(r.encryptedContent, user.encryptionSalt, r.iv),
+      tags: JSON.parse(decryptData(r.encryptedTags, user.encryptionSalt, r.iv) || '[]'),
+      createdAt: r.createdAt,
+      updatedAt: r.updatedAt
+    }));
+
+    return res.json({ items });
   } catch (err) {
-    console.error('GET /journal_secure/entries', err.message);
-    const msg = err.message.includes('TOKEN_MISSING')
-      ? 'token requis'
-      : 'token invalide';
-    res.status(401).json({ error: msg });
-  }
-});
-// === Export PDF ===
-const { exportNoteToPDF } = require('../utils/export_pdf');
-const path = require('path');
-
-router.post('/journal_secure/export/:id', async (req, res) => {
-  try {
-    const payload = verifyToken(req);
-    const user_id = Number(payload?.sub ?? payload?.id ?? payload?.user_id ?? payload?.userId);
-    if (!Number.isFinite(user_id)) return res.status(401).json({ error: 'token invalide' });
-
-    const id = Number(req.params.id);
-    const row = db.prepare('SELECT titre, contenu, rubrique, created_at, updated_at FROM carnet_entries WHERE id=? AND user_id=?').get(id, user_id);
-    if (!row) return res.status(404).json({ error: 'note introuvable' });
-
-    const filePath = await exportNoteToPDF(row, user_id);
-    return res.json({ ok: true, file: path.basename(filePath), path: filePath });
-  } catch (e) {
-    console.error('export pdf', e);
-    res.status(500).json({ error: 'échec export PDF' });
+    console.error('GET /journal_secure/entries', err);
+    const status = err.status || 500;
+    return res.status(status).json({ error: err.message });
   }
 });
 
