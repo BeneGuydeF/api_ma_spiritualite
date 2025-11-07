@@ -74,8 +74,32 @@ try {
   console.log('⚠️ Route auth.carnet non disponible:', e.message);
 }
 
-app.use('/api', require('./routes/journal_secure'));
+let journalSecureRoute = null;
+try {
+  journalSecureRoute = require('./routes/journal_secure');
+  app.use('/api', journalSecureRoute);
+  console.log('Route /api/journal_secure chargée');
+} catch (e) {
+  console.log('Route journal_secure non disponible:', e.message);
+}
 
+if (journalSecureRoute) {
+  app.use(
+    '/api/journal',
+    (req, _res, next) => {
+      if (!req.url || req.url === '/' || req.url === '') {
+        req.url = '/journal_secure/entries';
+      } else {
+        req.url = `/journal_secure${req.url}`;
+      }
+      next();
+    },
+    journalSecureRoute
+  );
+  console.log('Alias /api/journal redirigé vers journal_secure');
+} else {
+  console.log('Alias /api/journal inactif (journal_secure indisponible)');
+}
 try {
   const paymentsRoute = require('./routes/payments');
   app.use('/api/payments', paymentsRoute);
@@ -89,12 +113,6 @@ try {
 } catch (e) {
   console.log('⚠️ Route carnet non disponible:', e.message);
 }
-try {
-  const journalRoute = require('./routes/journal');
-  app.use('/api/journal', journalRoute);
-  console.log('✅ Route /api/journal chargée');
-} catch (e) { console.log('⚠️ Route journal non disponible:', e.message); }
-
 try {
   const donationsRoute = require('./routes/donations');
   app.use('/api/donations', donationsRoute);
@@ -142,3 +160,8 @@ app.listen(port, '0.0.0.0', () => {
 });
 
 module.exports = app;
+
+
+
+
+
