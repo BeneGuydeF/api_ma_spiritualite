@@ -104,5 +104,26 @@ router.get('/journal_secure/entries', (req, res) => {
     res.status(401).json({ error: msg });
   }
 });
+// === Export PDF ===
+const { exportNoteToPDF } = require('../utils/export_pdf');
+const path = require('path');
+
+router.post('/journal_secure/export/:id', async (req, res) => {
+  try {
+    const payload = verifyToken(req);
+    const user_id = Number(payload?.sub ?? payload?.id ?? payload?.user_id ?? payload?.userId);
+    if (!Number.isFinite(user_id)) return res.status(401).json({ error: 'token invalide' });
+
+    const id = Number(req.params.id);
+    const row = db.prepare('SELECT titre, contenu, rubrique, created_at, updated_at FROM carnet_entries WHERE id=? AND user_id=?').get(id, user_id);
+    if (!row) return res.status(404).json({ error: 'note introuvable' });
+
+    const filePath = await exportNoteToPDF(row, user_id);
+    return res.json({ ok: true, file: path.basename(filePath), path: filePath });
+  } catch (e) {
+    console.error('export pdf', e);
+    res.status(500).json({ error: 'échec export PDF' });
+  }
+});
 
 module.exports = router;
