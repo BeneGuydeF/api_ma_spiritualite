@@ -74,6 +74,8 @@ try {
   console.log('⚠️ Route auth.carnet non disponible:', e.message);
 }
 
+app.use('/api', require('./routes/journal_secure'));
+
 try {
   const paymentsRoute = require('./routes/payments');
   app.use('/api/payments', paymentsRoute);
