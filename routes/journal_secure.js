@@ -2,7 +2,7 @@
 const express = require('express');
 const jwt = require('jsonwebtoken');
 const db = require('../db/sqlite');
-const { encryptData, decryptData } = require('../utils/crypto');
+const { encrypt, decrypt } = require('../utils/crypto');
 
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET;
@@ -46,22 +46,27 @@ router.post('/journal_secure/entries', (req, res) => {
 
     if (!contenu) return res.status(422).json({ error: 'contenu requis' });
 
-    // Récupération du sel utilisateur
-    const user = db.prepare('SELECT encryptionSalt FROM users WHERE id=?').get(userId);
-    if (!user?.encryptionSalt) return res.status(500).json({ error: 'clé de chiffrement manquante' });
+    // Récupère le sel utilisateur depuis la base
+const user = db.prepare('SELECT encryptionSalt FROM users WHERE id=?').get(userId);
+if (!user || !user.encryptionSalt) {
+  throw new Error("Salt de chiffrement manquant pour cet utilisateur");
+}
 
-    // Chiffrement AES-256 via utils/crypto.js
-    const { encryptedData, iv } = encryptData(contenu, user.encryptionSalt);
-    const encryptedTags = encryptData(JSON.stringify(tags), user.encryptionSalt).encryptedData;
-    const now = new Date().toISOString();
+// Dérive une clé AES à partir du salt
+const key = deriveKey(user.encryptionSalt);
 
-    const stmt = db.prepare(`
-      INSERT INTO carnet_entries (userId, title, encryptedContent, encryptedTags, iv, createdAt, updatedAt)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `);
-    const result = stmt.run(userId, title, encryptedData, encryptedTags, iv, now, now);
+// Chiffrement AES-256 via utils/crypto.js
+const { encrypted, iv } = encrypt(contenu, key);
+const encryptedTags = encrypt(JSON.stringify(tags), key).encrypted;
+const now = new Date().toISOString();
 
-    return res.status(201).json({ id: result.lastInsertRowid, title, createdAt: now });
+const stmt = db.prepare(`
+  INSERT INTO carnet_entries (userId, title, encryptedContent, encryptedTags, iv, createdAt, updatedAt)
+  VALUES (?, ?, ?, ?, ?, ?, ?)
+`);
+const result = stmt.run(userId, title, encrypted, encryptedTags, iv, now, now);
+
+return res.status(201).json({ id: result.lastInsertRowid, title, createdAt: now });
   } catch (err) {
     console.error('POST /journal_secure/entries', err);
     const status = err.status || 500;
