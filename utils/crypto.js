@@ -4,7 +4,6 @@ const crypto = require('crypto');
 const ALGORITHM = 'aes-256-gcm';
 const IV_LENGTH = 16;
 const SALT_LENGTH = 32;
-const TAG_LENGTH = 16;
 
 /**
  * Génère un salt aléatoire pour l'utilisateur
@@ -14,7 +13,7 @@ function generateSalt() {
 }
 
 /**
- * Dérive une clé de chiffrement à partir du mot de passe et du salt
+ * Dérive une clé AES-256 à partir du mot de passe et du salt
  */
 function deriveKey(password, salt) {
   return crypto.pbkdf2Sync(password, Buffer.from(salt, 'hex'), 100000, 32, 'sha512');
@@ -22,22 +21,18 @@ function deriveKey(password, salt) {
 
 /**
  * Chiffre un texte avec AES-256-GCM
- * @param {string} plaintext - Texte à chiffrer
- * @param {string} password - Mot de passe utilisateur
- * @param {string} salt - Salt de l'utilisateur
- * @returns {object} - {encryptedData, iv, tag}
+ * @returns {object} { encryptedData, iv, tag }
  */
 function encrypt(plaintext, password, salt) {
   const key = deriveKey(password, salt);
   const iv = crypto.randomBytes(IV_LENGTH);
-  const cipher = crypto.createCipher(ALGORITHM, key);
+  const cipher = crypto.createCipheriv(ALGORITHM, key, iv);
+
   cipher.setAAD(Buffer.from('ma_spiritualite'));
-  
   let encrypted = cipher.update(plaintext, 'utf8', 'hex');
   encrypted += cipher.final('hex');
-  
+
   const tag = cipher.getAuthTag();
-  
   return {
     encryptedData: encrypted,
     iv: iv.toString('hex'),
@@ -46,27 +41,20 @@ function encrypt(plaintext, password, salt) {
 }
 
 /**
- * Déchiffre un texte avec AES-256-GCM
- * @param {string} encryptedData - Données chiffrées
- * @param {string} iv - Vecteur d'initialisation
- * @param {string} tag - Tag d'authentification
- * @param {string} password - Mot de passe utilisateur
- * @param {string} salt - Salt de l'utilisateur
- * @returns {string} - Texte déchiffré
+ * Déchiffre un texte AES-256-GCM
  */
 function decrypt(encryptedData, iv, tag, password, salt) {
   try {
     const key = deriveKey(password, salt);
-    const decipher = crypto.createDecipher(ALGORITHM, key);
+    const decipher = crypto.createDecipheriv(ALGORITHM, key, Buffer.from(iv, 'hex'));
     decipher.setAAD(Buffer.from('ma_spiritualite'));
     decipher.setAuthTag(Buffer.from(tag, 'hex'));
-    
+
     let decrypted = decipher.update(encryptedData, 'hex', 'utf8');
     decrypted += decipher.final('utf8');
-    
     return decrypted;
-  } catch (error) {
-    throw new Error('Déchiffrement échoué: mot de passe incorrect ou données corrompues');
+  } catch {
+    throw new Error('Déchiffrement échoué : mot de passe incorrect ou données corrompues');
   }
 }
 
@@ -79,7 +67,7 @@ function encryptJSON(obj, password, salt) {
 }
 
 /**
- * Déchiffre vers un objet JSON
+ * Déchiffre un objet JSON
  */
 function decryptJSON(encryptedData, iv, tag, password, salt) {
   const decrypted = decrypt(encryptedData, iv, tag, password, salt);
@@ -87,15 +75,12 @@ function decryptJSON(encryptedData, iv, tag, password, salt) {
 }
 
 /**
- * Génère un hash sécurisé pour vérification d'intégrité
+ * Génère un hash SHA-256 pour vérifier l’intégrité
  */
 function generateHash(data) {
   return crypto.createHash('sha256').update(data).digest('hex');
 }
 
-/**
- * Vérifie l'intégrité des données
- */
 function verifyHash(data, hash) {
   return generateHash(data) === hash;
 }
@@ -111,6 +96,5 @@ module.exports = {
   verifyHash,
   ALGORITHM,
   IV_LENGTH,
-  SALT_LENGTH,
-  TAG_LENGTH
+  SALT_LENGTH
 };
