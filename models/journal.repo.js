@@ -28,6 +28,13 @@ const findByUser = db.prepare(`
   LIMIT ? OFFSET ?
 `);
 
+const findAllWithContentByUser = db.prepare(`
+  SELECT id, userId, title, encryptedContent, encryptedTags, iv, createdAt, updatedAt
+  FROM journal_entries
+  WHERE userId = ?
+  ORDER BY createdAt DESC
+`);
+
 const countByUser = db.prepare(`
   SELECT COUNT(*) as total FROM journal_entries WHERE userId = ?
 `);
@@ -75,6 +82,11 @@ module.exports = {
   // Récupérer une entrée avec son contenu chiffré
   getWithContent: (id, userId) => {
     return findByUserWithContent.get(id, userId);
+  },
+  
+  // Récupérer toutes les entrées (contenu inclus) pour un utilisateur
+  getAllWithContent: (userId) => {
+    return findAllWithContentByUser.all(userId);
   },
 
   // Compter le nombre total d'entrées d'un utilisateur
