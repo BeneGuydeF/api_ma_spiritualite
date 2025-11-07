@@ -60,7 +60,6 @@ if (!user || !user.encryptionSalt) {
 const key = deriveKey(user.encryptionSalt);
 
 // --- Chiffrement AES-256 via utils/crypto.js ---
-const key = deriveKey(user.encryptionSalt);
 const { encryptedData, iv } = encrypt(contenu, key);
 const encryptedTags = encrypt(JSON.stringify(tags || []), key).encryptedData;
 const now = new Date().toISOString();
