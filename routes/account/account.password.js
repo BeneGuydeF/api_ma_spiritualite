@@ -6,8 +6,8 @@ const bcrypt = require('bcryptjs');
 const db = require('../../db/sqlite');
 const { requireAuth } = require('../../middleware/auth');
 
-const getPwd = db.prepare('SELECT id, password_hash AS passwordHash FROM users WHERE id = ?');
-const setPwd = db.prepare('UPDATE users SET password_hash = ? WHERE id = ?');
+const getPwd = db.prepare('SELECT id, passwordHash FROM users WHERE id = ?');
+setPwd = db.prepare('UPDATE users SET passwordHash = ? WHERE id = ?');
 
 // Politique : 12+ caractères, lettres, chiffres, caractères spéciaux
 const policy = /^(?=.*[A-Za-z])(?=.*\d)(?=.*[^A-Za-z0-9]).{12,}$/;
