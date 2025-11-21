@@ -1,11 +1,9 @@
 const express = require('express');
 const router = express.Router();
 
-// chemins corrects depuis routes/account/
 const db = require('../../db/sqlite');
 const { requireAuth } = require('../../middleware/auth');
 
-// Vérifie si la table existe
 const exists = (t) =>
   !!db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name=?").get(t);
 
@@ -13,21 +11,19 @@ const selCredits = db.prepare('SELECT credits FROM users WHERE id = ?');
 
 const selHistory = exists('credit_transactions')
   ? db.prepare(`
-      SELECT created_at AS date,
-             type,
-             amount,
-             provider,
-             payment_id AS paymentId,
-             description
+      SELECT 
+        createdAt AS date,     -- CORRECT pour ta base
+        type,
+        amount,
+        provider,
+        paymentId,
+        description
       FROM credit_transactions
       WHERE user_id=?
-      ORDER BY created_at DESC
+      ORDER BY createdAt DESC
     `)
   : null;
 
-// ========================================
-// GET /api/account/credits/status
-// ========================================
 router.get('/credits/status', requireAuth, (req, res) => {
   const uid = Number(req.user?.id);
   if (!Number.isFinite(uid)) return res.status(401).json({ error: 'unauthorized' });
@@ -39,23 +35,15 @@ router.get('/credits/status', requireAuth, (req, res) => {
   res.json({ credits, locked: credits <= 0 });
 });
 
-// ========================================
-// GET /api/account/payments/history
-// ========================================
 router.get('/payments/history', requireAuth, (req, res) => {
   const uid = Number(req.user?.id);
   if (!Number.isFinite(uid)) return res.status(401).json({ error: 'unauthorized' });
 
-  if (!selHistory) {
-    return res.json({ items: [], note: 'history_unavailable' });
-  }
+  if (!selHistory) return res.json({ items: [], note: 'history_unavailable' });
 
   res.json({ items: selHistory.all(uid) });
 });
 
-// ========================================
-// POST /api/account/donations/create
-// ========================================
 router.post('/donations/create', requireAuth, (req, res) => {
   const amt = Number(req.body?.amount);
   if (!Number.isFinite(amt) || amt <= 0) {
@@ -65,7 +53,4 @@ router.post('/donations/create', requireAuth, (req, res) => {
   res.json({ status: 'created', provider: 'email', amount: amt });
 });
 
-// ========================================
-// EXPORT CommonJS
-// ========================================
 module.exports = router;
