@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 
 // chemins corrects depuis routes/account/
-const db = require('../../lib/db');
+const db = require('../../db/sqlite');
 const { requireAuth } = require('../../middleware/auth');
 
 // Vérifie si la table existe

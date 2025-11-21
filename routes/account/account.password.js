@@ -3,7 +3,7 @@ const router = express.Router();
 
 // chemins corrects depuis routes/account/
 const bcrypt = require('bcryptjs');
-const db = require('../../lib/db');
+const db = require('../../db/sqlite');
 const { requireAuth } = require('../../middleware/auth');
 
 const getPwd = db.prepare('SELECT id, password_hash AS passwordHash FROM users WHERE id = ?');
