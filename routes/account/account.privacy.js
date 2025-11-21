@@ -82,7 +82,7 @@ router.delete('/', requireAuth, (req, res) => {
 // ==============================
 // GET /api/account/legal/:doc
 // ==============================
-router.get('/legal/:doc(cgv|rgpd|mentions)', (req, res) => {
+router.get('/legal/:doc', (req, res) => {
   const docs = {
     cgv: {
       title: 'CGV',
@@ -98,12 +98,13 @@ router.get('/legal/:doc(cgv|rgpd|mentions)', (req, res) => {
     }
   };
 
-  const d = docs[req.params.doc];
-  if (!d) {
+  const doc = req.params.doc;
+
+  if (!docs[doc]) {
     return res.status(404).json({ error: 'introuvable' });
   }
 
-  res.json(d);
+  res.json(docs[doc]);
 });
 
 // ==============================
