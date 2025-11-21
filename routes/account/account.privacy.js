@@ -9,16 +9,18 @@ const { requireAuth } = require('../../middleware/auth');
 const exists = (t) =>
   !!db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name=?").get(t);
 
+// ======================
 // Sélecteurs
+// ======================
 const selUser = db.prepare(`
   SELECT id,
          email,
          name,
-         age_bucket AS ageBucket,
+         COALESCE(ageBucket, age_bucket) AS ageBucket,
          theme,
          analytics,
          credits,
-         created_at AS createdAt
+         createdAt
   FROM users
   WHERE id = ?
 `);
@@ -26,19 +28,19 @@ const selUser = db.prepare(`
 const selJournal = exists('journal_entries')
   ? db.prepare(`
       SELECT id,
-             titre,
-             contenu,
-             rubrique,
-             created_at AS createdAt
+             title,
+             encryptedContent,
+             encryptedTags,
+             createdAt
       FROM journal_entries
-      WHERE user_id = ?
-      ORDER BY created_at ASC
+      WHERE userId = ?
+      ORDER BY createdAt ASC
     `)
   : null;
 
-// =======================================
+// ==============================
 // POST /api/account/export
-// =======================================
+// ==============================
 router.post('/export', requireAuth, (req, res) => {
   const uid = Number(req.user?.id);
   if (!Number.isFinite(uid)) {
@@ -52,7 +54,6 @@ router.post('/export', requireAuth, (req, res) => {
 
   const journal = selJournal ? selJournal.all(uid) : [];
 
-  // tu pourras ajouter les paiements plus tard
   res.json({
     user,
     journal,
@@ -60,9 +61,9 @@ router.post('/export', requireAuth, (req, res) => {
   });
 });
 
-// =======================================
+// ==============================
 // DELETE /api/account/
-// =======================================
+// ==============================
 router.delete('/', requireAuth, (req, res) => {
   const uid = Number(req.user?.id);
   if (!Number.isFinite(uid)) {
@@ -70,7 +71,7 @@ router.delete('/', requireAuth, (req, res) => {
   }
 
   if (exists('journal_entries')) {
-    db.prepare('DELETE FROM journal_entries WHERE user_id = ?').run(uid);
+    db.prepare('DELETE FROM journal_entries WHERE userId = ?').run(uid);
   }
 
   db.prepare('DELETE FROM users WHERE id = ?').run(uid);
@@ -78,9 +79,9 @@ router.delete('/', requireAuth, (req, res) => {
   res.json({ ok: true });
 });
 
-// =======================================
-// GET /api/account/legal/:doc(cgv|rgpd|mentions)
-// =======================================
+// ==============================
+// GET /api/account/legal/:doc
+// ==============================
 router.get('/legal/:doc(cgv|rgpd|mentions)', (req, res) => {
   const docs = {
     cgv: {
@@ -105,7 +106,7 @@ router.get('/legal/:doc(cgv|rgpd|mentions)', (req, res) => {
   res.json(d);
 });
 
-// =======================================
-// EXPORT CommonJS
-// =======================================
+// ==============================
+// EXPORT
+// ==============================
 module.exports = router;
