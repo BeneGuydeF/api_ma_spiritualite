@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 
-const db = require('../../lib/db');
+const db = require('../../db/sqlite');
 const { requireAuth } = require('../../middleware/auth');
 
 // Vérifie que la table existe
