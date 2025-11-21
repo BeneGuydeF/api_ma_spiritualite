@@ -113,8 +113,6 @@ try {
 
 try {
   const carnetRoute = require('./routes/carnet'); 
-  app.use('/api/journal_secure', journalSecureRoute);
-  console.log('✅ Route /carnet* chargée');
 } catch (e) {
   console.log('⚠️ Route carnet non disponible:', e.message);
 }
