@@ -1,29 +1,35 @@
 const express = require('express');
 const router = express.Router();
 
-const db = require('../../db/sqlite');
+const db = require('../../lib/db');
 const { requireAuth } = require('../../middleware/auth');
 
+// Vérifie que la table existe
 const exists = (t) =>
   !!db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name=?").get(t);
 
+// Sélecteurs compatibles avec TON schéma réel
 const selCredits = db.prepare('SELECT credits FROM users WHERE id = ?');
 
 const selHistory = exists('credit_transactions')
   ? db.prepare(`
-      SELECT 
-        createdAt AS date,     -- CORRECT pour ta base
+      SELECT
+        createdAt AS date,
         type,
         amount,
-        provider,
-        paymentId,
-        description
+        description,
+        paymentMethod,
+        paymentId
       FROM credit_transactions
-      WHERE user_id=?
+      WHERE userId = ?
       ORDER BY createdAt DESC
     `)
   : null;
 
+
+// ==========================
+// GET /credits/status
+// ==========================
 router.get('/credits/status', requireAuth, (req, res) => {
   const uid = Number(req.user?.id);
   if (!Number.isFinite(uid)) return res.status(401).json({ error: 'unauthorized' });
@@ -35,15 +41,25 @@ router.get('/credits/status', requireAuth, (req, res) => {
   res.json({ credits, locked: credits <= 0 });
 });
 
+// ==========================
+// GET /payments/history
+// ==========================
 router.get('/payments/history', requireAuth, (req, res) => {
   const uid = Number(req.user?.id);
   if (!Number.isFinite(uid)) return res.status(401).json({ error: 'unauthorized' });
 
-  if (!selHistory) return res.json({ items: [], note: 'history_unavailable' });
+  if (!selHistory) {
+    return res.json({ items: [], note: 'history_unavailable' });
+  }
 
-  res.json({ items: selHistory.all(uid) });
+  const items = selHistory.all(uid);
+  res.json({ items });
 });
 
+// ==========================
+// POST /donations/create
+// (placeholder)
+// ==========================
 router.post('/donations/create', requireAuth, (req, res) => {
   const amt = Number(req.body?.amount);
   if (!Number.isFinite(amt) || amt <= 0) {
