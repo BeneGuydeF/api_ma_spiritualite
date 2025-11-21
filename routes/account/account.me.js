@@ -5,32 +5,6 @@ const router = express.Router();
 const db = require('../../db/sqlite');
 const { requireAuth } = require('../../middleware/auth');
 
-// ======================================
-// Vérification / ajout des colonnes manquantes
-// ======================================
-function ensureUserOptionalCols() {
-  try {
-    const cols = db.prepare("PRAGMA table_info('users')").all().map(c => c.name);
-    const have = new Set(cols);
-
-    if (!have.has('name')) {
-      db.prepare("ALTER TABLE users ADD COLUMN name TEXT").run();
-    }
-    if (!have.has('age_bucket')) {
-      db.prepare("ALTER TABLE users ADD COLUMN age_bucket TEXT").run();
-    }
-    if (!have.has('theme')) {
-      db.prepare("ALTER TABLE users ADD COLUMN theme TEXT").run();
-    }
-    if (!have.has('analytics')) {
-      db.prepare("ALTER TABLE users ADD COLUMN analytics INTEGER DEFAULT 0").run();
-    }
-  } catch (e) {
-    console.warn('[account.me] ensureUserOptionalCols:', e.message);
-  }
-}
-
-ensureUserOptionalCols();
 
 // ======================================
 // Sélecteur utilisateur
