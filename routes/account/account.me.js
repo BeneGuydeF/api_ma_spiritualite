@@ -1,26 +1,50 @@
-import express from 'express';
-import db from '../lib/db.js';
-import { requireAuth } from '../lib/auth.js';
-
+const express = require('express');
 const router = express.Router();
 
+// Chemins corrects depuis routes/account/
+const db = require('../../lib/db');
+const { requireAuth } = require('../../middleware/auth');
+
+// ======================================
+// Vérification / ajout des colonnes manquantes
+// ======================================
 function ensureUserOptionalCols() {
   try {
     const cols = db.prepare("PRAGMA table_info('users')").all().map(c => c.name);
     const have = new Set(cols);
-    if (!have.has('name')) db.prepare("ALTER TABLE users ADD COLUMN name TEXT").run();
-    if (!have.has('age_bucket')) db.prepare("ALTER TABLE users ADD COLUMN age_bucket TEXT").run();
-    if (!have.has('theme')) db.prepare("ALTER TABLE users ADD COLUMN theme TEXT").run();
-    if (!have.has('analytics')) db.prepare("ALTER TABLE users ADD COLUMN analytics INTEGER DEFAULT 0").run();
+
+    if (!have.has('name')) {
+      db.prepare("ALTER TABLE users ADD COLUMN name TEXT").run();
+    }
+    if (!have.has('age_bucket')) {
+      db.prepare("ALTER TABLE users ADD COLUMN age_bucket TEXT").run();
+    }
+    if (!have.has('theme')) {
+      db.prepare("ALTER TABLE users ADD COLUMN theme TEXT").run();
+    }
+    if (!have.has('analytics')) {
+      db.prepare("ALTER TABLE users ADD COLUMN analytics INTEGER DEFAULT 0").run();
+    }
   } catch (e) {
     console.warn('[account.me] ensureUserOptionalCols:', e.message);
   }
 }
+
 ensureUserOptionalCols();
 
+// ======================================
+// Sélecteur utilisateur
+// ======================================
 const selUser = db.prepare(`
-  SELECT id,email,name,age_bucket AS ageBucket,theme,analytics,credits
-  FROM users WHERE id = ?
+  SELECT id,
+         email,
+         name,
+         age_bucket AS ageBucket,
+         theme,
+         analytics,
+         credits
+  FROM users
+  WHERE id = ?
 `);
 
 function toPayload(row) {
@@ -31,44 +55,81 @@ function toPayload(row) {
     ageBucket: row.ageBucket ?? '-',
     theme: row.theme ?? 'system',
     analytics: !!row.analytics,
-    credits: Number.isFinite(row.credits) ? Number(row.credits) : 0,
+    credits: Number.isFinite(row.credits) ? Number(row.credits) : 0
   };
 }
 
+// ======================================
+// GET /api/account/me
+// ======================================
 router.get('/me', requireAuth, (req, res) => {
   const uid = Number(req.user?.id);
-  if (!Number.isFinite(uid)) return res.status(401).json({ error: 'unauthorized' });
+  if (!Number.isFinite(uid)) {
+    return res.status(401).json({ error: 'unauthorized' });
+  }
+
   const row = selUser.get(uid);
-  if (!row) return res.status(404).json({ error: 'introuvable' });
+  if (!row) {
+    return res.status(404).json({ error: 'introuvable' });
+  }
+
   res.json(toPayload(row));
 });
 
+// ======================================
+// PUT /api/account/me
+// ======================================
 router.put('/me', requireAuth, (req, res) => {
   const uid = Number(req.user?.id);
-  if (!Number.isFinite(uid)) return res.status(401).json({ error: 'unauthorized' });
+  if (!Number.isFinite(uid)) {
+    return res.status(401).json({ error: 'unauthorized' });
+  }
+
   const body = req.body || {};
-  const sets = [], vals = [];
+  const sets = [];
+  const vals = [];
 
-  if ('name' in body) { sets.push('name = ?'); vals.push(String(body.name || '').trim().slice(0,120) || null); }
+  if ('name' in body) {
+    sets.push('name = ?');
+    vals.push(String(body.name || '').trim().slice(0, 120) || null);
+  }
+
   if ('ageBucket' in body) {
-    const allowed = new Set(['-','<18','18-24','25-34','35-49','50-64','65+']);
+    const allowed = new Set(['-', '<18', '18-24', '25-34', '35-49', '50-64', '65+']);
     const v = body.ageBucket == null ? null : String(body.ageBucket);
-    if (v && !allowed.has(v)) return res.status(422).json({ error: 'ageBucket invalide' });
-    sets.push('age_bucket = ?'); vals.push(v === '-' ? null : v);
+    if (v && !allowed.has(v)) {
+      return res.status(422).json({ error: 'ageBucket invalide' });
+    }
+    sets.push('age_bucket = ?');
+    vals.push(v === '-' ? null : v);
   }
-  if ('theme' in body) {
-    const allowed = new Set(['system','light','dark']);
-    const v = body.theme == null ? null : String(body.theme);
-    if (!allowed.has(v)) return res.status(422).json({ error: 'theme invalide' });
-    sets.push('theme = ?'); vals.push(v);
-  }
-  if ('analytics' in body) { sets.push('analytics = ?'); vals.push(body.analytics ? 1 : 0); }
 
-  if (!sets.length) return res.status(400).json({ error: 'rien à mettre à jour' });
+  if ('theme' in body) {
+    const allowed = new Set(['system', 'light', 'dark']);
+    const v = body.theme == null ? null : String(body.theme);
+    if (!allowed.has(v)) {
+      return res.status(422).json({ error: 'theme invalide' });
+    }
+    sets.push('theme = ?');
+    vals.push(v);
+  }
+
+  if ('analytics' in body) {
+    sets.push('analytics = ?');
+    vals.push(body.analytics ? 1 : 0);
+  }
+
+  if (!sets.length) {
+    return res.status(400).json({ error: 'rien à mettre à jour' });
+  }
+
   db.prepare(`UPDATE users SET ${sets.join(', ')} WHERE id = ?`).run(...vals, uid);
 
   const updated = selUser.get(uid);
   res.json(toPayload(updated));
 });
 
-export default router;
+// ======================================
+// EXPORT CommonJS
+// ======================================
+module.exports = router;
