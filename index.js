@@ -136,10 +136,11 @@ try {
   console.log('✅ Route /api/enfants chargée');
 } catch (e) { console.log('⚠️ Route enfants non disponible:', e.message); }
 
+app.use('/api/account', accountPrivacy);
 app.use('/api/account', accountMe);
 app.use('/api/account', accountPassword);
 app.use('/api/account', accountCredits);
-app.use('/api/account', accountPrivacy);
+
 
 // Health simple
 app.get('/health', (_req, res) => res.json({ ok: true }));
