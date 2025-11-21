@@ -1,9 +1,14 @@
+
 require('dotenv').config();
 const express = require('express');
 const bodyParser = require('body-parser');
 const cors = require('cors');
 const rateLimit = require('express-rate-limit');
 const listEndpoints = require('express-list-endpoints');
+const accountMe = require('./routes/account/account.me.js');
+const accountPassword = require('./routes/account/account.password.js');
+const accountCredits = require('./routes/account/account.credits.js');
+const accountPrivacy = require('./routes/account/account.privacy.js');
 
 const app = express();
 const port = process.env.PORT || 3013;
@@ -108,7 +113,7 @@ try {
 
 try {
   const carnetRoute = require('./routes/carnet'); 
-  app.use('/api', carnetRoute);
+  app.use('/api/journal_secure', journalSecureRoute);
   console.log('✅ Route /carnet* chargée');
 } catch (e) {
   console.log('⚠️ Route carnet non disponible:', e.message);
@@ -130,6 +135,11 @@ try {
   app.use('/api/enfants', enfantsRoute);            
   console.log('✅ Route /api/enfants chargée');
 } catch (e) { console.log('⚠️ Route enfants non disponible:', e.message); }
+
+app.use('/api/account', accountMe);
+app.use('/api/account', accountPassword);
+app.use('/api/account', accountCredits);
+app.use('/api/account', accountPrivacy);
 
 // Health simple
 app.get('/health', (_req, res) => res.json({ ok: true }));

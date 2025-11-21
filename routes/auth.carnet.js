@@ -9,8 +9,8 @@ const Joi = require('joi');
 const router = express.Router();
 
 // Appliquer les middlewares de sécurité
-router.use(logSecurityEvent);
-router.use(csrfProtection);
+//router.use(logSecurityEvent);
+//router.use(csrfProtection);
 
 const normEmail  = (s='') => s.toString().trim().toLowerCase();
 const normAnswer = (s='') => s.toString().trim().toLowerCase().replace(/\s+/g, ' ');
@@ -113,6 +113,12 @@ router.post('/carnet/login', loginRateLimit, async (req, res) => {
     return err(res, 500, 'Erreur serveur');
   }
 });
+//MIDDLEWARES RÉSERVÉS AUX ROUTES PROTÉGÉES
+
+const { requireAuth } = require('../middleware/auth');
+router.use(require('../middleware/auth').requireAuth);
+router.use(logSecurityEvent);
+router.use(csrfProtection);
 
 // 3) FORGOT INIT — question secrète ?
 // GET /api/auth/password/forgot/init?email=...
