@@ -19,12 +19,15 @@ const allowedOrigins = (process.env.CORS_ORIGIN || '')
 app.use(cors({ origin: allowedOrigins.length ? allowedOrigins : true, credentials: true }));
 
 // ============================
-// Account routes (API sécurisée)
+// AUTH — doit être AVANT les paiements
 // ============================
-const accountMe = require('./routes/account/account.me.js');
-const accountPassword = require('./routes/account/account.password.js');
-const accountCredits = require('./routes/account/account.credits.js');
-const accountPrivacy = require('./routes/account/account.privacy.js');
+try {
+  const authCarnetRoute = require('./routes/auth.carnet');
+  app.use('/api/auth', authCarnetRoute);
+  console.log('✅ Route /api/auth chargée (PUBLIC)');
+} catch (e) {
+  console.log('⚠️ Route auth.carnet non disponible:', e.message);
+}
 
 // ============================
 // Payments (router + webhook)
@@ -89,14 +92,7 @@ try {
   console.log('✅ Route /api/priere chargée');
 } catch (e) { console.log('⚠️ Route prière non disponible:', e.message); }
 
-try {
-  const authCarnetRoute = require('./routes/auth.carnet');
-  app.use('/api/auth', authCarnetRoute);
-  console.log('✅ Route /api/auth chargée');
-} catch (e) {
-  console.log('⚠️ Route auth.carnet non disponible:', e.message);
-}
-
+// Journal sécurisé
 let journalSecureRoute = null;
 try {
   journalSecureRoute = require('./routes/journal_secure');
@@ -159,15 +155,6 @@ app.use((req, res) => {
 // Start server
 app.listen(port, '0.0.0.0', () => {
   console.log(`✅ Serveur Ma Spiritualité démarré sur le port ${port}`);
-  console.log('🎯 Routes disponibles:');
-  console.log('  - POST /api/priere');
-  console.log('  - POST /api/confession');
-  console.log('  - POST /api/enfants');
-  console.log('  - GET  /api/evangile');
-  console.log('  - GET  /api/paroledujour');
-  console.log('  - GET  /api/liturgie');
-  console.log('  - GET  /health');
-  console.log('  - GET  /');
 });
 
 module.exports = app;
