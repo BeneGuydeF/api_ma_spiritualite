@@ -44,9 +44,9 @@ const getPaymentSessionsByUser = db.prepare(`
 
 // Prix des crédits (en centimes) - Positionnement familles catholiques CSP+
 const CREDIT_PRICES = {
-  15: 300,   // 15 crédits = 3€ (0,20€/crédit)
-  35: 700,   // 35 crédits = 7€ (0,20€/crédit)  
-  85: 1500   // 85 crédits = 15€ (0,18€/crédit - meilleur prix)
+  20: 300,   // 20 crédits = 3€ (0,15€/crédit)
+  45: 700,   // 45 crédits = 7€ (0,15€/crédit)  
+  100: 1500   // 100 crédits = 15€ (0,15€/crédit - meilleur prix)
 };
 
 module.exports = {

@@ -16,7 +16,7 @@ const selUser = db.prepare(`
   SELECT id,
          email,
          name,
-         COALESCE(ageBucket, age_bucket) AS ageBucket,
+         COALESCE(age_bucket, ageBucket) AS ageBucket,
          theme,
          analytics,
          credits,
@@ -27,16 +27,18 @@ const selUser = db.prepare(`
 
 const selJournal = exists('journal_entries')
   ? db.prepare(`
-      SELECT id,
-             title,
-             encryptedContent,
-             encryptedTags,
-             createdAt
+      SELECT
+        id,
+        title,
+        encryptedContent,
+        encryptedTags,
+        createdAt
       FROM journal_entries
       WHERE userId = ?
       ORDER BY createdAt ASC
     `)
   : null;
+
 
 // ==============================
 // POST /api/account/export
@@ -57,9 +59,10 @@ router.post('/export', requireAuth, (req, res) => {
   res.json({
     user,
     journal,
-    payments: []
+    payments: [] // compat futur
   });
 });
+
 
 // ==============================
 // DELETE /api/account/
@@ -79,15 +82,15 @@ router.delete('/', requireAuth, (req, res) => {
   res.json({ ok: true });
 });
 
+
 // ==============================
 // GET /api/account/legal/:doc
 // ==============================
 router.get('/legal/:doc', (req, res) => {
   const allowed = ['cgv', 'rgpd', 'mentions'];
   if (!allowed.includes(req.params.doc)) {
-    return res.status(404).json({ error: 'Document légal introuvable' });
+    return res.status(404).json({ error: 'Document introuvable' });
   }
-  // le code existant de chargement des docs suit sans changement
 
   const docs = {
     cgv: {
@@ -105,11 +108,6 @@ router.get('/legal/:doc', (req, res) => {
   };
 
   const doc = req.params.doc;
-
-  if (!docs[doc]) {
-    return res.status(404).json({ error: 'introuvable' });
-  }
-
   res.json(docs[doc]);
 });
 

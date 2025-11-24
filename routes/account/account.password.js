@@ -22,32 +22,31 @@ router.post('/change-password', requireAuth, async (req, res) => {
   }
 
   const { oldPassword, newPassword } = req.body || {};
-
   if (!oldPassword || !newPassword) {
-    return res.status(400).json({ error: 'champs requis' });
+    return res.status(400).json({ error: 'Champs requis.' });
   }
 
   if (!policy.test(newPassword)) {
     return res.status(422).json({
-      error: 'mot de passe faible',
-      details: '12+, lettre, chiffre, spécial'
+      error: 'Mot de passe trop faible.',
+      details: 'Minimum 12 caractères avec lettre, chiffre et caractère spécial.'
     });
   }
 
   const row = getPwd.get(uid);
   if (!row || !row.passwordHash) {
-    return res.status(404).json({ error: 'introuvable' });
+    return res.status(404).json({ error: 'Utilisateur introuvable.' });
   }
 
-  const ok = await bcrypt.compare(oldPassword, row.passwordHash);
-  if (!ok) {
-    return res.status(401).json({ error: 'ancien mot de passe incorrect' });
+  const match = await bcrypt.compare(oldPassword, row.passwordHash);
+  if (!match) {
+    return res.status(401).json({ error: 'Ancien mot de passe incorrect.' });
   }
 
-  const next = await bcrypt.hash(newPassword, 10);
-  setPwd.run(next, uid);
+  const newHash = await bcrypt.hash(newPassword, 12);
+  setPwd.run(newHash, uid);
 
-  res.json({ ok: true });
+  return res.json({ ok: true });
 });
 
 // ==========================================

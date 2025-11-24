@@ -5,7 +5,6 @@ const router = express.Router();
 const db = require('../../db/sqlite');
 const { requireAuth } = require('../../middleware/auth');
 
-
 // ======================================
 // Sélecteur utilisateur
 // ======================================
@@ -13,7 +12,7 @@ const selUser = db.prepare(`
   SELECT id,
          email,
          name,
-         age_bucket AS ageBucket,
+         COALESCE(age_bucket, ageBucket) AS ageBucket,
          theme,
          analytics,
          credits
@@ -63,28 +62,31 @@ router.put('/me', requireAuth, (req, res) => {
   const sets = [];
   const vals = [];
 
+  // ---- name ----------------------------------------------------
   if ('name' in body) {
+    const cleaned = String(body.name || '').trim().slice(0, 120);
     sets.push('name = ?');
-    vals.push(String(body.name || '').trim().slice(0, 120) || null);
+    vals.push(cleaned || null);
   }
 
+  // ---- ageBucket -----------------------------------------------
   if ('ageBucket' in body) {
-  const allowed = new Set(['-', '<18', '18-24', '25-34', '35-49', '50-64', '65+']);
-  const v = body.ageBucket == null ? null : String(body.ageBucket);
+    const allowed = new Set(['-', '<18', '18-24', '25-34', '35-49', '50-64', '65+']);
+    const v = body.ageBucket == null ? null : String(body.ageBucket);
 
-  if (v && !allowed.has(v)) {
-    return res.status(422).json({ error: 'ageBucket invalide' });
+    if (v && !allowed.has(v)) {
+      return res.status(422).json({ error: 'ageBucket invalide' });
+    }
+
+    // Normalisation
+    const normalized = (v === '-' ? null : v);
+
+    // 👉 On met à jour UNIQUEMENT la colonne officielle
+    sets.push('age_bucket = ?');
+    vals.push(normalized);
   }
 
-  // 🔥 Synchronisation des deux colonnes
-  const normalized = (v === '-' ? null : v);
-  sets.push('age_bucket = ?');
-  vals.push(normalized);
-
-  sets.push('ageBucket = ?');
-  vals.push(normalized);
-}
-
+  // ---- theme ---------------------------------------------------
   if ('theme' in body) {
     const allowed = new Set(['system', 'light', 'dark']);
     const v = body.theme == null ? null : String(body.theme);
@@ -95,13 +97,14 @@ router.put('/me', requireAuth, (req, res) => {
     vals.push(v);
   }
 
+  // ---- analytics -----------------------------------------------
   if ('analytics' in body) {
     sets.push('analytics = ?');
     vals.push(body.analytics ? 1 : 0);
   }
 
   if (!sets.length) {
-    return res.status(400).json({ error: 'rien à mettre à jour' });
+    return res.status(400).json({ error: 'Rien à mettre à jour' }); // encodage propre
   }
 
   db.prepare(`UPDATE users SET ${sets.join(', ')} WHERE id = ?`).run(...vals, uid);

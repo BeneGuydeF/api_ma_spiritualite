@@ -1,14 +1,18 @@
-
 require('dotenv').config();
 const express = require('express');
 const bodyParser = require('body-parser');
 const cors = require('cors');
 const rateLimit = require('express-rate-limit');
 const listEndpoints = require('express-list-endpoints');
+
+// Account routes
 const accountMe = require('./routes/account/account.me.js');
 const accountPassword = require('./routes/account/account.password.js');
 const accountCredits = require('./routes/account/account.credits.js');
 const accountPrivacy = require('./routes/account/account.privacy.js');
+
+// Payments (router + webhook handler)
+const { router: paymentsRoute, stripeWebhookHandler } = require('./routes/payments');
 
 const app = express();
 const port = process.env.PORT || 3013;
@@ -23,8 +27,24 @@ const allowedOrigins = (process.env.CORS_ORIGIN || '')
   .split(',').map(s => s.trim()).filter(Boolean);
 app.use(cors({ origin: allowedOrigins.length ? allowedOrigins : true, credentials: true }));
 
-// JSON parser en amont de toutes les routes
+// ============================
+// 🔥 Stripe Webhook (RAW BODY)
+// ============================
+app.post(
+  '/api/payments/stripe/webhook',
+  express.raw({ type: 'application/json' }),
+  stripeWebhookHandler
+);
+
+// ==================================
+// JSON parser — après le webhook Stripe
+// ==================================
 app.use(bodyParser.json({ limit: '1mb' }));
+
+// ============================
+// 💳 Routes paiements normales
+// ============================
+app.use('/api/payments', paymentsRoute);
 
 // Rate limit global léger
 app.use(rateLimit({
@@ -34,7 +54,7 @@ app.use(rateLimit({
   legacyHeaders: false,
 }));
 
-// Health très tôt
+// Health early
 app.get('/__boot', (_req, res) => res.json({ ok: true, via: '/__boot' }));
 app.get('/__ping', (_req, res) => res.json({ ok: true, ts: new Date().toISOString() }));
 
@@ -61,20 +81,20 @@ try {
 
 try {
   const confessionRoute = require('./routes/confession');
-  app.use('/api/confession', confessionRoute); // POST '/'
+  app.use('/api/confession', confessionRoute);
   console.log('✅ Route /api/confession chargée');
 } catch (e) { console.log('⚠️ Route confession non disponible:', e.message); }
 
 try {
   const priereRoute = require('./routes/priere');
-  app.use('/api/priere', priereRoute); // POST '/'
+  app.use('/api/priere', priereRoute);
   console.log('✅ Route /api/priere chargée');
 } catch (e) { console.log('⚠️ Route prière non disponible:', e.message); }
 
 try {
   const authCarnetRoute = require('./routes/auth.carnet');
   app.use('/api/auth', authCarnetRoute);
-  console.log('✅ Route /api/auth (auth.carnet.js) chargée');
+  console.log('✅ Route /api/auth chargée');
 } catch (e) {
   console.log('⚠️ Route auth.carnet non disponible:', e.message);
 }
@@ -105,13 +125,6 @@ if (journalSecureRoute) {
 } else {
   console.log('Alias /api/journal inactif (journal_secure indisponible)');
 }
-try {
-  const paymentsRoute = require('./routes/payments');
-  app.use('/api/payments', paymentsRoute);
-  console.log('✅ Route /api/payments chargée');
-} catch (e) { console.log('⚠️ Route payments non disponible:', e.message); }
-
-console.log("Route /api/carnet désactivée (journal_secure utilisé)");
 
 try {
   const donationsRoute = require('./routes/donations');
@@ -126,32 +139,32 @@ try {
 } catch (e) { console.log('⚠️ Route feedback non disponible:', e.message); }
 
 try {
-  const enfantsRoute = require('./routes/enfants'); 
-  app.use('/api/enfants', enfantsRoute);            
+  const enfantsRoute = require('./routes/enfants');
+  app.use('/api/enfants', enfantsRoute);
   console.log('✅ Route /api/enfants chargée');
 } catch (e) { console.log('⚠️ Route enfants non disponible:', e.message); }
 
+// Account
 app.use('/api/account', accountPrivacy);
 app.use('/api/account', accountMe);
 app.use('/api/account', accountPassword);
 app.use('/api/account', accountCredits);
 
-
-// Health simple
+// Health
 app.get('/health', (_req, res) => res.json({ ok: true }));
 app.get('/', (_req, res) => res.send('🌿 Backend Ma Spiritualité (SQLite) est en ligne.'));
 
-// Debug routes (fiable)
+// Debug
 app.get('/api/_debug/routes', (_req, res) => {
   res.json(listEndpoints(app));
 });
 
-// 404 lisible (après toutes les routes)
+// 404
 app.use((req, res) => {
   res.status(404).json({ error: 'Not Found', path: req.path });
 });
 
-// Démarrage
+// Start server
 app.listen(port, '0.0.0.0', () => {
   console.log(`✅ Serveur Ma Spiritualité démarré sur le port ${port}`);
   console.log('🎯 Routes disponibles:');
@@ -166,8 +179,3 @@ app.listen(port, '0.0.0.0', () => {
 });
 
 module.exports = app;
-
-
-
-
-
