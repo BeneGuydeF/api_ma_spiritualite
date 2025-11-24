@@ -19,6 +19,14 @@ const allowedOrigins = (process.env.CORS_ORIGIN || '')
 app.use(cors({ origin: allowedOrigins.length ? allowedOrigins : true, credentials: true }));
 
 // ============================
+// IMPORT MISSING — ACCOUNT ROUTES
+// ============================
+const accountMe = require('./routes/account/account.me.js');
+const accountPassword = require('./routes/account/account.password.js');
+const accountCredits = require('./routes/account/account.credits.js');
+const accountPrivacy = require('./routes/account/account.privacy.js');
+
+// ============================
 // AUTH — doit être AVANT les paiements
 // ============================
 try {
