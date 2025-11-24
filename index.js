@@ -169,6 +169,7 @@ if (journalSecureRoute) {
 }
 
 // AUTRES ROUTES
+
 try {
   const feedbackRoute = require('./routes/feedback');
   app.use('/api/feedback', feedbackRoute);
