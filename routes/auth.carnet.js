@@ -3,6 +3,7 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const rateLimit = require('express-rate-limit');
 const users = require('../models/user.repo');
+const db = require('../db/sqlite');
 const { generateToken, loginRateLimit, sensitiveRateLimit, logSecurityEvent, csrfProtection } = require('../middleware/auth');
 const Joi = require('joi');
 
@@ -60,7 +61,10 @@ router.post('/carnet/init', sensitiveRateLimit, async (req, res) => {
       createdAt: nowISO(),
       updatedAt: nowISO(),
     });
-
+try {
+  db.prepare(`UPDATE users SET age_bucket = ? WHERE id = ?`)
+    .run(ageBucket ?? null, result.lastInsertRowid);
+} catch(e) {}
     const user = users.getById(result.lastInsertRowid);
     const token = generateToken(user.id, user.email);
     

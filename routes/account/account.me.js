@@ -69,14 +69,21 @@ router.put('/me', requireAuth, (req, res) => {
   }
 
   if ('ageBucket' in body) {
-    const allowed = new Set(['-', '<18', '18-24', '25-34', '35-49', '50-64', '65+']);
-    const v = body.ageBucket == null ? null : String(body.ageBucket);
-    if (v && !allowed.has(v)) {
-      return res.status(422).json({ error: 'ageBucket invalide' });
-    }
-    sets.push('age_bucket = ?');
-    vals.push(v === '-' ? null : v);
+  const allowed = new Set(['-', '<18', '18-24', '25-34', '35-49', '50-64', '65+']);
+  const v = body.ageBucket == null ? null : String(body.ageBucket);
+
+  if (v && !allowed.has(v)) {
+    return res.status(422).json({ error: 'ageBucket invalide' });
   }
+
+  // 🔥 Synchronisation des deux colonnes
+  const normalized = (v === '-' ? null : v);
+  sets.push('age_bucket = ?');
+  vals.push(normalized);
+
+  sets.push('ageBucket = ?');
+  vals.push(normalized);
+}
 
   if ('theme' in body) {
     const allowed = new Set(['system', 'light', 'dark']);
