@@ -125,12 +125,6 @@ if (journalSecureRoute) {
 }
 
 try {
-  const donationsRoute = require('./routes/donations');
-  app.use('/api/donations', donationsRoute);
-  console.log('✅ Route /api/donations chargée');
-} catch (e) { console.log('⚠️ Route donations non disponible:', e.message); }
-
-try {
   const feedbackRoute = require('./routes/feedback');
   app.use('/api/feedback', feedbackRoute);
   console.log('✅ Route /api/feedback chargée');
