@@ -4,7 +4,11 @@ const rateLimit = require('express-rate-limit');
 const crypto = require('crypto');
 const users = require('../models/user.repo');
 
-const JWT_SECRET = process.env.JWT_SECRET || crypto.randomBytes(64).toString('hex');
+// JWT secret must be explicitly defined in environment (no fallback allowed)
+if (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 32) {
+  throw new Error("JWT_SECRET missing or too short (min 32 chars)");
+}
+const JWT_SECRET = process.env.JWT_SECRET;
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
 
 // Rate limiting pour les tentatives de connexion

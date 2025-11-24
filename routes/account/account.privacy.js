@@ -83,6 +83,11 @@ router.delete('/', requireAuth, (req, res) => {
 // GET /api/account/legal/:doc
 // ==============================
 router.get('/legal/:doc', (req, res) => {
+  const allowed = ['cgv', 'rgpd', 'mentions'];
+  if (!allowed.includes(req.params.doc)) {
+    return res.status(404).json({ error: 'Document légal introuvable' });
+  }
+
   const docs = {
     cgv: {
       title: 'CGV',
