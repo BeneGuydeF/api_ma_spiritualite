@@ -87,6 +87,7 @@ router.get('/legal/:doc', (req, res) => {
   if (!allowed.includes(req.params.doc)) {
     return res.status(404).json({ error: 'Document légal introuvable' });
   }
+  // le code existant de chargement des docs suit sans changement
 
   const docs = {
     cgv: {
