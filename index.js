@@ -5,15 +5,6 @@ const cors = require('cors');
 const rateLimit = require('express-rate-limit');
 const listEndpoints = require('express-list-endpoints');
 
-// Account routes
-const accountMe = require('./routes/account/account.me.js');
-const accountPassword = require('./routes/account/account.password.js');
-const accountCredits = require('./routes/account/account.credits.js');
-const accountPrivacy = require('./routes/account/account.privacy.js');
-
-// Payments (router + webhook handler)
-const { router: paymentsRoute, stripeWebhookHandler } = require('./routes/payments');
-
 const app = express();
 const port = process.env.PORT || 3013;
 
@@ -28,22 +19,29 @@ const allowedOrigins = (process.env.CORS_ORIGIN || '')
 app.use(cors({ origin: allowedOrigins.length ? allowedOrigins : true, credentials: true }));
 
 // ============================
-// 🔥 Stripe Webhook (RAW BODY)
+// Account routes (API sécurisée)
 // ============================
+const accountMe = require('./routes/account/account.me.js');
+const accountPassword = require('./routes/account/account.password.js');
+const accountCredits = require('./routes/account/account.credits.js');
+const accountPrivacy = require('./routes/account/account.privacy.js');
+
+// ============================
+// Payments (router + webhook)
+// ============================
+const { router: paymentsRoute, stripeWebhookHandler } = require('./routes/payments');
+
+// 1) Stripe Webhook AVANT bodyParser.json()
 app.post(
   '/api/payments/stripe/webhook',
   express.raw({ type: 'application/json' }),
   stripeWebhookHandler
 );
 
-// ==================================
-// JSON parser — après le webhook Stripe
-// ==================================
+// 2) JSON parser pour toutes les autres routes
 app.use(bodyParser.json({ limit: '1mb' }));
 
-// ============================
-// 💳 Routes paiements normales
-// ============================
+// 3) Routes paiements protégées (requireAuth)
 app.use('/api/payments', paymentsRoute);
 
 // Rate limit global léger
