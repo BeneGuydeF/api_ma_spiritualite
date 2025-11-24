@@ -111,11 +111,8 @@ try {
   console.log('✅ Route /api/payments chargée');
 } catch (e) { console.log('⚠️ Route payments non disponible:', e.message); }
 
-try {
-  const carnetRoute = require('./routes/carnet'); 
-} catch (e) {
-  console.log('⚠️ Route carnet non disponible:', e.message);
-}
+console.log("Route /api/carnet désactivée (journal_secure utilisé)");
+
 try {
   const donationsRoute = require('./routes/donations');
   app.use('/api/donations', donationsRoute);
