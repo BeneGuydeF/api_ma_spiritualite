@@ -117,12 +117,24 @@ router.post('/carnet/login', loginRateLimit, async (req, res) => {
     return err(res, 500, 'Erreur serveur');
   }
 });
-//MIDDLEWARES RÉSERVÉS AUX ROUTES PROTÉGÉES
-
+// =============================
+// ROUTES PROTÉGÉES (TOKEN REQUIS)
+// =============================
+const protectedRouter = express.Router();
 const { requireAuth } = require('../middleware/auth');
-router.use(require('../middleware/auth').requireAuth);
-router.use(logSecurityEvent);
-router.use(csrfProtection);
+
+protectedRouter.use(requireAuth);
+protectedRouter.use(logSecurityEvent);
+protectedRouter.use(csrfProtection);
+
+// Exemple de routes protégées
+protectedRouter.get('/protected/ping', (req, res) => {
+  res.json({ ok: true, userId: req.user?.id });
+});
+
+// Monter les routes protégées sous /api/auth
+router.use('/', protectedRouter);
+
 
 // 3) FORGOT INIT — question secrète ?
 // GET /api/auth/password/forgot/init?email=...
