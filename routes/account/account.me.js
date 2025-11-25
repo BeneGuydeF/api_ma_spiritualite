@@ -81,9 +81,13 @@ router.put('/me', requireAuth, (req, res) => {
     // Normalisation
     const normalized = (v === '-' ? null : v);
 
-    // 👉 On met à jour UNIQUEMENT la colonne officielle
-    sets.push('age_bucket = ?');
-    vals.push(normalized);
+    // Mise à jour des deux colonnes pour compatibilité
+sets.push('age_bucket = ?');
+vals.push(normalized);
+
+sets.push('ageBucket = ?');
+vals.push(normalized);
+
   }
 
   // ---- theme ---------------------------------------------------

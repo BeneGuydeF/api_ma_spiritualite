@@ -18,6 +18,14 @@ const allowedOrigins = (process.env.CORS_ORIGIN || '')
   .split(',').map(s => s.trim()).filter(Boolean);
 app.use(cors({ origin: allowedOrigins.length ? allowedOrigins : true, credentials: true }));
 
+// Stripe Webhook AVANT bodyParser.json()
+app.post(
+  '/api/payments/stripe/webhook',
+  express.raw({ type: 'application/json' }),
+  stripeWebhookHandler
+);
+
+
 //  JSON parser pour toutes les autres routes
 app.use(bodyParser.json({ limit: '1mb' }));
 // ============================
@@ -41,16 +49,6 @@ const { router: paymentsRoute, stripeWebhookHandler } = require('./routes/paymen
 const accountMe = require('./routes/account/account.me.js');
 const accountPassword = require('./routes/account/account.password.js');
 const accountCredits = require('./routes/account/account.credits.js');
-
-
-
-
-// 1) Stripe Webhook AVANT bodyParser.json()
-app.post(
-  '/api/payments/stripe/webhook',
-  express.raw({ type: 'application/json' }),
-  stripeWebhookHandler
-);
 
 
 
@@ -141,6 +139,12 @@ try {
   app.use('/api/enfants', enfantsRoute);
   console.log('✅ Route /api/enfants chargée');
 } catch (e) { console.log('⚠️ Route enfants non disponible:', e.message); }
+
+try {
+  const donationsRoute = require('./routes/donations');
+  app.use('/api/donations', donationsRoute);
+  console.log('✅ Route /api/donations chargée');
+} catch (e) { console.log('⚠️ Route donations non disponible:', e.message); }
 
 // Account
 app.use('/api/account', accountPrivacy);

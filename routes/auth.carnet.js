@@ -133,7 +133,7 @@ protectedRouter.get('/protected/ping', (req, res) => {
 });
 
 // Monter les routes protégées sous /api/auth
-router.use('/', protectedRouter);
+router.use('/carnet', protectedRouter);
 
 
 // 3) FORGOT INIT — question secrète ?

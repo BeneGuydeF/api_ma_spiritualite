@@ -7,7 +7,13 @@ const DATA_DIR = path.join(__dirname, '..', 'data');
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 
 // Fichier DB persistant (sauvegardé sur disque)
-const dbPath = path.join(DATA_DIR, 'ma_spiritualite.db');
+const envDbPath = process.env.SQLITE_PATH;
+const dbPath = envDbPath
+  ? path.resolve(envDbPath)
+  : path.join(DATA_DIR, 'ma_spiritualite.db');
+
+console.log('[SQLite] Using DB at:', dbPath);
+
 const db = new Database(dbPath);
 
 // Schéma minimal (idempotent)
