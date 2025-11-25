@@ -18,13 +18,6 @@ const allowedOrigins = (process.env.CORS_ORIGIN || '')
   .split(',').map(s => s.trim()).filter(Boolean);
 app.use(cors({ origin: allowedOrigins.length ? allowedOrigins : true, credentials: true }));
 
-// ============================
-// IMPORT MISSING — ACCOUNT ROUTES
-// ============================
-const accountMe = require('./routes/account/account.me.js');
-const accountPassword = require('./routes/account/account.password.js');
-const accountCredits = require('./routes/account/account.credits.js');
-const accountPrivacy = require('./routes/account/account.privacy.js');
 
 // ============================
 // AUTH — doit être AVANT les paiements
@@ -36,11 +29,20 @@ try {
 } catch (e) {
   console.log('⚠️ Route auth.carnet non disponible:', e.message);
 }
-
 // ============================
 // Payments (router + webhook)
 // ============================
 const { router: paymentsRoute, stripeWebhookHandler } = require('./routes/payments');
+
+// ============================
+// IMPORT MISSING — ACCOUNT ROUTES
+// ============================
+const accountMe = require('./routes/account/account.me.js');
+const accountPassword = require('./routes/account/account.password.js');
+const accountCredits = require('./routes/account/account.credits.js');
+const accountPrivacy = require('./routes/account/account.privacy.js');
+
+
 
 // 1) Stripe Webhook AVANT bodyParser.json()
 app.post(
