@@ -55,7 +55,9 @@ app.post(
 app.use(bodyParser.json({ limit: '1mb' }));
 
 // 3) Routes paiements protégées (requireAuth)
-app.use('/api/payments', paymentsRoute);
+app.use('/api/payments', (req, res, next) => {
+  paymentsRoute(req, res, next);
+});
 
 // Rate limit global léger
 app.use(rateLimit({
