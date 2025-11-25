@@ -18,7 +18,8 @@ const allowedOrigins = (process.env.CORS_ORIGIN || '')
   .split(',').map(s => s.trim()).filter(Boolean);
 app.use(cors({ origin: allowedOrigins.length ? allowedOrigins : true, credentials: true }));
 
-
+//  JSON parser pour toutes les autres routes
+app.use(bodyParser.json({ limit: '1mb' }));
 // ============================
 // AUTH — doit être AVANT les paiements
 // ============================
@@ -51,8 +52,7 @@ app.post(
   stripeWebhookHandler
 );
 
-// 2) JSON parser pour toutes les autres routes
-app.use(bodyParser.json({ limit: '1mb' }));
+
 
 // 3) Routes paiements protégées (requireAuth)
 app.use('/api/payments', (req, res, next) => {
