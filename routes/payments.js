@@ -1,4 +1,6 @@
 // routes/payments.js — Paiements crédits + dons + webhook Stripe
+require('dotenv').config();
+
 const express = require('express');
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const { requireAuth, sensitiveRateLimit } = require('../middleware/auth');
@@ -7,9 +9,14 @@ const Joi = require('joi');
 
 const router = express.Router();
 
-/* ============================================================
-   VALIDATION
-============================================================ */
+// ============================================================
+// CONSTANTES
+// ============================================================
+const FRONT = process.env.FRONTEND_URL || "https://maspiritualite.keryxia.fr";
+
+// ============================================================
+// VALIDATION
+// ============================================================
 const createCreditPaymentSchema = Joi.object({
   credits: Joi.number().valid(20, 45, 100).required(),
   provider: Joi.string().valid('stripe', 'paypal').required(),
@@ -18,20 +25,20 @@ const createCreditPaymentSchema = Joi.object({
 });
 
 const createDonationSchema = Joi.object({
-  amount: Joi.number().min(100).required(), // 1 € min (centimes)
+  amount: Joi.number().min(100).required(), // 1€ min
   message: Joi.string().max(500).optional().allow('')
 });
 
-/* ============================================================
-   STRIPE WEBHOOK — PAS D'AUTH, RAW BODY
-============================================================ */
+// ============================================================
+// STRIPE WEBHOOK — SANS AUTH, RAW BODY
+// ============================================================
 async function stripeWebhookHandler(req, res) {
   const sig = req.headers['stripe-signature'];
 
   let event;
   try {
     event = stripe.webhooks.constructEvent(
-      req.body,
+      req.body,              // buffer
       sig,
       process.env.STRIPE_WEBHOOK_SECRET
     );
@@ -43,19 +50,18 @@ async function stripeWebhookHandler(req, res) {
   if (event.type === "checkout.session.completed") {
     const session = event.data.object;
 
-    // --------------------------
+    // ============================================================
     // CASE 1 : DONATION
-    // --------------------------
+    // ============================================================
     if (session.metadata?.type === "donation") {
+      const amount = session.amount_total;
+      const userId = parseInt(session.metadata.userId, 10) || null;
+
       try {
         credits.updatePaymentSession(session.id, "completed");
+        console.log(`🙏 Don confirmé : ${(amount / 100).toFixed(2)}€ — ${session.id}`);
 
-        const amount = session.amount_total; // centimes
-        const userId = parseInt(session.metadata.userId, 10);
-
-        console.log(`🙏 Don confirmé : ${(amount/100).toFixed(2)}€ — session ${session.id}`);
-
-        // 🎁 BONUS : don >= 40€
+        // 🎁 BONUS pour dons ≥ 40€
         if (userId && amount >= 4000) {
           credits.addCredits(
             userId,
@@ -64,21 +70,21 @@ async function stripeWebhookHandler(req, res) {
             session.id,
             "Bonus 100 crédits (don ≥ 40€)"
           );
-
           console.log(`🎁 Bonus appliqué : +100 crédits pour user ${userId}`);
         }
 
         return res.json({ received: true });
+
       } catch (err) {
-        console.error("Erreur dans le traitement du don :", err);
+        console.error("Erreur traitement don :", err);
         credits.updatePaymentSession(session.id, "failed");
         return res.json({ received: true, error: true });
       }
     }
 
-    // --------------------------
-    // CASE 2 : CREDIT PURCHASE
-    // --------------------------
+    // ============================================================
+    // CASE 2 : ACHAT DE CRÉDITS
+    // ============================================================
     const userId = parseInt(session.metadata?.userId, 10);
     const creditAmount = parseInt(session.metadata?.credits, 10);
 
@@ -89,9 +95,13 @@ async function stripeWebhookHandler(req, res) {
           creditAmount,
           "stripe",
           session.id,
-          `Achat de ${creditAmount} crédits via Stripe`
+          `Achat de ${creditAmount} crédits`
         );
+
         credits.updatePaymentSession(session.id, "completed");
+
+        console.log(`💳 Crédit ajouté : +${creditAmount} pour user ${userId}`);
+
       } catch (err) {
         console.error("Erreur paiement crédits :", err);
         credits.updatePaymentSession(session.id, "failed");
@@ -104,17 +114,21 @@ async function stripeWebhookHandler(req, res) {
   return res.json({ received: true });
 }
 
-/* ============================================================
-   ROUTES PAYMENTS PROTÉGÉES (requireAuth)
-============================================================ */
+// ============================================================
+// ROUTES PROTÉGÉES (AUTH OBLIGATOIRE)
+// ============================================================
 router.use(requireAuth);
 
-/* PACKAGES CRÉDITS */
+// ============================================================
+// PACKAGES CRÉDITS
+// ============================================================
 router.get('/packages', (req, res) => {
   res.json({ packages: credits.getAvailableCreditPackages() });
 });
 
-/* CRÉATION SESSION — CRÉDITS */
+// ============================================================
+// CRÉATION SESSION — ACHAT CRÉDITS
+// ============================================================
 router.post('/create', sensitiveRateLimit, async (req, res) => {
   try {
     const { error } = createCreditPaymentSchema.validate(req.body);
@@ -122,18 +136,16 @@ router.post('/create', sensitiveRateLimit, async (req, res) => {
 
     const { credits: creditAmount, provider, successUrl, cancelUrl } = req.body;
     const userId = req.user.id;
-    const price = credits.getCreditPrice(creditAmount);
 
-    if (!price) {
-      return res.status(400).json({ error: "Package de crédits invalide" });
-    }
+    const price = credits.getCreditPrice(creditAmount);
+    if (!price) return res.status(400).json({ error: "Package de crédits invalide" });
 
     if (provider === "stripe") {
       const session = await stripe.checkout.sessions.create({
-        payment_method_types: ['card'],
+        payment_method_types: ["card"],
         line_items: [{
           price_data: {
-            currency: 'eur',
+            currency: "eur",
             product_data: {
               name: `${creditAmount} crédits Ma Spiritualité`,
               description: `Package de ${creditAmount} crédits`
@@ -142,20 +154,20 @@ router.post('/create', sensitiveRateLimit, async (req, res) => {
           },
           quantity: 1
         }],
-        mode: 'payment',
-        success_url: successUrl || `${process.env.FRONTEND_URL}/payment/success`,
-        cancel_url: cancelUrl || `${process.env.FRONTEND_URL}/payment/cancel`,
+        mode: "payment",
+        success_url: successUrl || `${FRONT}/payment/success`,
+        cancel_url: cancelUrl || `${FRONT}/payment/cancel`,
         metadata: {
+          type: "credits",
           userId: userId.toString(),
-          credits: creditAmount.toString(),
-          type: "credits"
+          credits: creditAmount.toString()
         }
       });
 
       credits.createPaymentSession({
         userId,
         sessionId: session.id,
-        provider: 'stripe',
+        provider: "stripe",
         amount: price,
         credits: creditAmount
       });
@@ -171,7 +183,10 @@ router.post('/create', sensitiveRateLimit, async (req, res) => {
   }
 });
 
-/* CRÉATION SESSION — DONATION */
+// ============================================================
+// CRÉATION SESSION — DON
+// ============================================================
+// CRÉATION SESSION — DONATION
 router.post('/donation', sensitiveRateLimit, async (req, res) => {
   try {
     const { error } = createDonationSchema.validate(req.body);
@@ -208,7 +223,7 @@ router.post('/donation', sensitiveRateLimit, async (req, res) => {
       sessionId: session.id,
       provider: 'stripe',
       amount,
-      credits: null
+      credits: 0           // ✅ IMPORTANT : plus de NOT NULL error
     });
 
     return res.json({ sessionId: session.id, url: session.url });
@@ -219,9 +234,10 @@ router.post('/donation', sensitiveRateLimit, async (req, res) => {
   }
 });
 
-/* ============================================================
-   EXPORTS
-============================================================ */
+
+// ============================================================
+// EXPORT
+// ============================================================
 module.exports = {
   router,
   stripeWebhookHandler
