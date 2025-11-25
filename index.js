@@ -4,7 +4,7 @@ const bodyParser = require('body-parser');
 const cors = require('cors');
 const rateLimit = require('express-rate-limit');
 const listEndpoints = require('express-list-endpoints');
-
+const accountPrivacy = require('./routes/account/account.privacy.js');
 const app = express();
 const port = process.env.PORT || 3013;
 
@@ -41,7 +41,7 @@ const { router: paymentsRoute, stripeWebhookHandler } = require('./routes/paymen
 const accountMe = require('./routes/account/account.me.js');
 const accountPassword = require('./routes/account/account.password.js');
 const accountCredits = require('./routes/account/account.credits.js');
-const accountPrivacy = require('./routes/account/account.privacy.js');
+
 
 
 
@@ -55,9 +55,7 @@ app.post(
 
 
 // 3) Routes paiements protégées (requireAuth)
-app.use('/api/payments', (req, res, next) => {
-  paymentsRoute(req, res, next);
-});
+app.use('/api/payments', paymentsRoute);
 
 // Rate limit global léger
 app.use(rateLimit({
