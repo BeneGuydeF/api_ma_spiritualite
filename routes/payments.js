@@ -186,6 +186,7 @@ router.post('/create', sensitiveRateLimit, async (req, res) => {
 // ============================================================
 // CRÉATION SESSION — DON
 // ============================================================
+// CRÉATION SESSION — DONATION
 router.post('/donation', sensitiveRateLimit, async (req, res) => {
   try {
     const { error } = createDonationSchema.validate(req.body);
@@ -195,21 +196,21 @@ router.post('/donation', sensitiveRateLimit, async (req, res) => {
     const userId = req.user.id;
 
     const session = await stripe.checkout.sessions.create({
-      payment_method_types: ["card"],
+      payment_method_types: ['card'],
       line_items: [{
         price_data: {
-          currency: "eur",
+          currency: 'eur',
           product_data: {
-            name: "Don - Ma Spiritualité",
+            name: "Don à Ma Spiritualité",
             description: message || "Merci pour votre générosité."
           },
           unit_amount: amount
         },
         quantity: 1
       }],
-      mode: "payment",
-      success_url: `${FRONT}/donation/success`,
-      cancel_url: `${FRONT}/donation/cancel`,
+      mode: 'payment',
+      success_url: `${process.env.FRONTEND_URL}/donation/success`,
+      cancel_url: `${process.env.FRONTEND_URL}/donation/cancel`,
       metadata: {
         type: "donation",
         userId: userId.toString(),
@@ -220,9 +221,9 @@ router.post('/donation', sensitiveRateLimit, async (req, res) => {
     credits.createPaymentSession({
       userId,
       sessionId: session.id,
-      provider: "stripe",
+      provider: 'stripe',
       amount,
-      credits: 0          // ✔ IMPOSSIBLE de mettre null → SQLite NOT NULL
+      credits: 0           // ✅ IMPORTANT : plus de NOT NULL error
     });
 
     return res.json({ sessionId: session.id, url: session.url });
@@ -232,6 +233,7 @@ router.post('/donation', sensitiveRateLimit, async (req, res) => {
     res.status(500).json({ error: "Erreur serveur" });
   }
 });
+
 
 // ============================================================
 // EXPORT
