@@ -17,6 +17,10 @@ app.set('trust proxy', 1);
 const allowedOrigins = (process.env.CORS_ORIGIN || '')
   .split(',').map(s => s.trim()).filter(Boolean);
 app.use(cors({ origin: allowedOrigins.length ? allowedOrigins : true, credentials: true }));
+// ============================
+// Payments (router + webhook)
+// ============================
+const { router: paymentsRoute, stripeWebhookHandler } = require('./routes/payments');
 
 // Stripe Webhook AVANT bodyParser.json()
 app.post(
@@ -38,10 +42,6 @@ try {
 } catch (e) {
   console.log('⚠️ Route auth.carnet non disponible:', e.message);
 }
-// ============================
-// Payments (router + webhook)
-// ============================
-const { router: paymentsRoute, stripeWebhookHandler } = require('./routes/payments');
 
 // ============================
 // IMPORT MISSING — ACCOUNT ROUTES
