@@ -95,15 +95,15 @@ router.get('/legal/:doc', (req, res) => {
   const docs = {
     cgv: {
       title: 'CGV',
-      html: '<h1>CGV</h1><p>Conditions générales de vente…</p>'
+      html: '<h1>CGV</h1><p>Conditions générales de vente.</p>'
     },
     rgpd: {
       title: 'RGPD',
-      html: '<h1>RGPD</h1><p>Politique de confidentialité…</p>'
+      html: '<h1>RGPD</h1><p>Politique de confidentialité.</p>'
     },
     mentions: {
       title: 'Mentions légales',
-      html: '<h1>Mentions</h1><p>Éditeur: Keryxi Dev…</p>'
+      html: '<h1>Mentions</h1><p>Éditeur : Keryxi Dev.</p>'
     }
   };
 
