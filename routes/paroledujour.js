@@ -55,16 +55,16 @@ router.get('/', async (req, res) => {
   };
 
   try {
-    const payload = isDefaultZone
-      ? await AELFService.getLiturgicalData(requestedDate || undefined)
-      : await AELFService.fetchFromAELF(effectiveDate, normalizedZone);
+   const payload = await AELFService.getTodayPsalm(requestedDate || undefined);
+
 
     if (payload?.psaume) {
       return res.json(buildResponse(payload));
     }
 
     // Fallback : retente France+cache si zone exotique vide
-    return res.status(503).json({ error: 'Psaume indisponible (AELF + fallback HTML)' });
+    return res.status(503).json({ error: 'Psaume indisponible ' });
+
   } catch (error) {
     console.error('[/api/paroledujour] error:', error?.message || error);
     try {
