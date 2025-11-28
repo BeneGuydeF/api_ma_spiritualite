@@ -150,11 +150,19 @@ class AELFService {
           verset: evangile.verset_evangile ? this.cleanText(evangile.verset_evangile) : '',
           texte: this.cleanText(evangile.contenu),
         } : null,
-        psaume: psaume ? {
-          reference: psaume.ref || '',
-          refrain: psaume.refrain_psalmique ? this.cleanText(psaume.refrain_psalmique) : '',
-          texte: this.cleanText(psaume.contenu || '')
-        } : null,
+       psaume: psaume ? {
+  reference: psaume.ref || '',
+  
+  // ⚠️ NOUVEAU : compatibilité totale avec anciens + nouveaux formats AELF
+  refrain: psaume.refrain
+    ? this.cleanText(psaume.refrain)
+    : (psaume.refrain_psalmique
+        ? this.cleanText(psaume.refrain_psalmique)
+        : ''),
+
+  texte: this.cleanText(psaume.contenu || '')
+} : null,
+
         zone,
         cachedAt: new Date().toISOString()
       };
