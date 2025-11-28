@@ -20,7 +20,6 @@ class AELFService {
 
   /**
    * Normalise une zone pour l'API AELF (slug attendu)
-   * Zones courantes autorisees : france, canada, suisse, belgique, luxembourg
    */
   normalizeZone(country) {
     const s = String(country || 'france').trim().toLowerCase();
@@ -42,7 +41,9 @@ class AELFService {
       const now = new Date();
       const fmt = new Intl.DateTimeFormat('fr-FR', {
         timeZone: 'Europe/Paris',
-        year: 'numeric', month: '2-digit', day: '2-digit'
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
       });
       const parts = fmt.formatToParts(now).reduce((acc, p) => {
         acc[p.type] = p.value;
@@ -55,7 +56,7 @@ class AELFService {
   }
 
   /**
-   * Nom de fichier de cache pour une date + zone
+   * Nom de fichier cache
    */
   getCacheFileName(date, country = 'france') {
     const zone = this.normalizeZone(country);
@@ -63,7 +64,7 @@ class AELFService {
   }
 
   /**
-   * Cache valide (< 24h)
+   * Cache valide ?
    */
   isCacheValid(cacheFile) {
     try {
@@ -95,7 +96,7 @@ class AELFService {
   }
 
   /**
-   * Nettoyage HTML -> texte
+   * Nettoyage HTML → texte
    */
   cleanText(html) {
     if (!html) return '';
@@ -116,8 +117,7 @@ class AELFService {
   }
 
   /**
-   * Recupere la messe du jour depuis AELF
-   * (evangile + psaume uniquement dans l'objet retourne)
+   * Récupération AELF (messe)
    */
   async fetchFromAELF(date, country = 'france') {
     const zone = this.normalizeZone(country);
@@ -130,7 +130,14 @@ class AELFService {
       });
 
       const data = response.data;
-      if (!data || !data.messes || !data.messes[0]) {
+
+      // ⚠ Protection : si HTML → fallback
+      if (typeof data !== 'object' || !data.messes) {
+        console.error('[AELF] Réponse HTML détectée → fallback nécessaire');
+        throw new Error('AELF_HTML');
+      }
+
+      if (!data.messes || !data.messes[0]) {
         throw new Error('Structure de donnees AELF invalide');
       }
 
@@ -138,9 +145,13 @@ class AELFService {
       const lectures = Array.isArray(messe.lectures) ? messe.lectures : [];
 
       const evangile = lectures.find(l => l.type === 'evangile');
-      const psaume = lectures.find(l => l.type === 'psaume');
 
-      const result = {
+      const psaume = lectures.find(l => {
+        const t = (l.type || '').toLowerCase();
+        return t.includes('psaume') || t.includes('psalm');
+      });
+
+      return {
         date,
         informations: data.informations,
         evangile: evangile ? {
@@ -148,64 +159,113 @@ class AELFService {
           reference: evangile.ref || '',
           intro: evangile.intro_lue || '',
           verset: evangile.verset_evangile ? this.cleanText(evangile.verset_evangile) : '',
-          texte: this.cleanText(evangile.contenu),
+          texte: this.cleanText(evangile.contenu)
         } : null,
-       psaume: psaume ? {
-  reference: psaume.ref || '',
-  
-  // ⚠️ NOUVEAU : compatibilité totale avec anciens + nouveaux formats AELF
-  refrain: psaume.refrain
-    ? this.cleanText(psaume.refrain)
-    : (psaume.refrain_psalmique
-        ? this.cleanText(psaume.refrain_psalmique)
-        : ''),
 
-  texte: this.cleanText(psaume.contenu || '')
-} : null,
+        psaume: psaume ? {
+          reference: psaume.ref || '',
+          refrain: psaume.refrain
+            ? this.cleanText(psaume.refrain)
+            : (psaume.refrain_psalmique
+              ? this.cleanText(psaume.refrain_psalmique)
+              : ''),
+          texte: this.cleanText(psaume.contenu || '')
+        } : null,
 
         zone,
         cachedAt: new Date().toISOString()
       };
 
-      console.log(`[aelf] Donnees recuperees avec succes pour ${date} (${zone})`);
-      return result;
     } catch (error) {
       console.error(`[aelf] Erreur AELF ${date} (${country}):`, error.message);
-      if (error.response) {
-        console.error('Status:', error.response.status);
-        console.error('Data:', error.response.data);
-      }
       throw error;
     }
   }
 
   /**
-   * Donnees liturgiques avec cache (France par defaut)
+   * Fallback Laudes → psaume
+   */
+  async fetchPsalmFallbackLaudes(date, country = 'france') {
+    const zone = this.normalizeZone(country);
+    try {
+      const url = `${this.baseURL}/laudes/${date}/${zone}`;
+      const response = await axios.get(url, { timeout: 8000 });
+      const data = response.data;
+      if (!data) return null;
+
+      const psInvit = data?.invitatoire?.psaume;
+      const psLaudes = data?.psaume;
+      const raw = psInvit || psLaudes;
+      if (!raw) return null;
+
+      return {
+        reference: raw.ref || raw.reference || '',
+        refrain: raw.refrain ? this.cleanText(raw.refrain) : '',
+        texte: this.cleanText(raw.contenu || raw.texte || '')
+      };
+
+    } catch (err) {
+      console.error('[AELF Laudes] Fallback impossible:', err.message);
+      return null;
+    }
+  }
+
+  /**
+   * Données liturgiques
    */
   async getLiturgicalData(date = null, country = 'france') {
     const targetDate = date || this.getTodayDate();
     const zone = this.normalizeZone(country);
     const cacheFile = this.getCacheFileName(targetDate, zone);
 
+    // 1 — Cache valide
+    if (this.isCacheValid(cacheFile)) {
+      console.log(`[cache] Utilisation du cache pour ${targetDate} (${zone})`);
+      const cached = this.readCache(cacheFile);
+      if (cached) return cached;
+    }
+
+    // 2 — API JSON
+    let fresh = null;
     try {
-      if (this.isCacheValid(cacheFile)) {
-        console.log(`[cache] Utilisation du cache pour ${targetDate} (${zone})`);
+      fresh = await this.fetchFromAELF(targetDate, zone);
+
+    } catch (error) {
+      console.error('[AELF] Erreur JSON → fallback Laudes');
+
+      const fallbackPsalm = await this.fetchPsalmFallbackLaudes(targetDate, zone);
+      if (fallbackPsalm) {
+        fresh = {
+          date: targetDate,
+          informations: null,
+          evangile: null,
+          psaume: fallbackPsalm,
+          zone,
+          cachedAt: new Date().toISOString()
+        };
+        this.writeCache(cacheFile, fresh);
+        return fresh;
+      }
+
+      if (fs.existsSync(cacheFile)) {
         const cached = this.readCache(cacheFile);
         if (cached) return cached;
       }
 
-      const fresh = await this.fetchFromAELF(targetDate, zone);
-      this.writeCache(cacheFile, fresh);
-      return fresh;
-    } catch (error) {
-      console.error('Erreur lors de la recuperation liturgique:', error);
-      if (fs.existsSync(cacheFile)) {
-        console.log(`[cache] Utilisation du cache expire pour ${targetDate} (${zone})`);
-        const cached = this.readCache(cacheFile);
-        if (cached) return cached;
-      }
       throw error;
     }
+
+    // 3 — Si API JSON sans psaume → fallback
+    if (!fresh.psaume) {
+      const fallbackP = await this.fetchPsalmFallbackLaudes(targetDate, zone);
+      if (fallbackP) {
+        fresh.psaume = fallbackP;
+      }
+    }
+
+    // 4 — cache + retour
+    this.writeCache(cacheFile, fresh);
+    return fresh;
   }
 
   /**
@@ -213,10 +273,12 @@ class AELFService {
    */
   async getTodayGospel() {
     const data = await this.getLiturgicalData();
-    if (!data.evangile) throw new Error("Evangile non disponible pour aujourd'hui");
+    if (!data.evangile)
+      throw new Error("Evangile non disponible pour aujourd'hui");
+
     return {
       titre: data.evangile.titre,
-      parole: data.evangile.reference, // compat
+      parole: data.evangile.reference,
       texte: data.evangile.texte,
       reference: data.evangile.reference,
       intro: data.evangile.intro,
@@ -227,46 +289,51 @@ class AELFService {
   }
 
   /**
-   * Parole du jour = UNIQUEMENT le repons du psaume (+ reference)
+   * Parole du jour = répons du psaume
    */
   async getTodayWord() {
-    const data = await this.getLiturgicalData(); // France par defaut
+    const data = await this.getLiturgicalData();
     if (!data?.psaume) throw new Error('Psaume non disponible');
 
     const texte = (data.psaume.refrain || '').trim();
-    const reference = data.psaume.reference || '';
-
     if (!texte) throw new Error('Repons du psaume non disponible');
 
     return {
       texte,
-      reference,
+      reference: data.psaume.reference || '',
       date: data.date,
       informations: data.informations
     };
   }
 
   /**
-   * Nettoyage du cache (> 7 jours)
+   * Nettoyage du cache
    */
   cleanOldCache() {
     try {
       const files = fs.readdirSync(this.cacheDir);
       const now = new Date();
       let cleaned = 0;
+
       for (const file of files) {
         if (!file.startsWith('liturgie_') || !file.endsWith('.json')) continue;
+
         const fp = path.join(this.cacheDir, file);
         const stats = fs.statSync(fp);
         const daysDiff = (now - stats.mtime) / (1000 * 60 * 60 * 24);
+
         if (daysDiff > 7) {
           fs.unlinkSync(fp);
           cleaned++;
         }
       }
-      if (cleaned > 0) console.log(`[cache] ${cleaned} fichiers de cache expires supprimes`);
+
+      if (cleaned > 0) {
+        console.log(`[cache] ${cleaned} fichiers nettoyés`);
+      }
+
     } catch (e) {
-      console.error('Erreur lors du nettoyage du cache:', e);
+      console.error('Erreur nettoyage cache:', e);
     }
   }
 }
