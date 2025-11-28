@@ -1,31 +1,26 @@
 // routes/paroledujour.js
 // -> Renvoie le RÉPONS DU PSAUME uniquement (texte + référence)
-
+//    Params optionnels : ?date=YYYY-MM-DD&zone=France|Canada|... (par défaut: France)
 const express = require('express');
 const router = express.Router();
 const AELFService = require('../services/aelf.service');
 
-/* -------------------------------------------------------
- * Nettoyage d’un répons du psaume
- * -----------------------------------------------------*/
 function extractRepons(raw) {
   if (!raw) return '';
-
+  // Texte déjà "clean" par le service, on isole la 1ère ligne parlante
   const text = String(raw).replace(/\r\n/g, '\n').trim();
   const firstBlock = text.split(/\n{2,}/)[0]?.trim() || '';
   let firstLine = (firstBlock.split('\n').find(l => l && l.trim().length) || '').trim();
 
-  // Préfixes R/ etc.
+  // Nettoyage des préfixes fréquents : R/, R., tirets
   firstLine = firstLine.replace(/^(R[\/\.\-\–—]\s*)/i, '');
-  // Guillemets
+
+  // Retire guillemets éventuels
   firstLine = firstLine.replace(/^[«"']\s*|\s*[»"']$/g, '');
 
   return firstLine.trim();
 }
 
-/* -------------------------------------------------------
- * Route principale
- * -----------------------------------------------------*/
 router.get('/', async (req, res) => {
   const rawDate = typeof req.query.date === 'string' ? req.query.date.trim() : '';
   const rawZone = typeof req.query.zone === 'string' ? req.query.zone.trim() : '';
@@ -36,39 +31,56 @@ router.get('/', async (req, res) => {
 
   const requestedDate = rawDate || null;
   const normalizedZone = rawZone || 'France';
+  const isDefaultZone = !rawZone || normalizedZone.toLowerCase() === 'france';
   const effectiveDate = requestedDate || AELFService.getTodayDate();
 
-  try {
-    const lit = await AELFService.getLiturgie(effectiveDate, normalizedZone);
+  const buildResponse = (payload) => {
+    const psaume = payload?.psaume || null;
 
-    if (!lit || !lit.psaume) {
-      return res.status(404).json({ error: 'Psaume indisponible.' });
-    }
+    const reference = psaume?.reference || '';
+    const refrain = psaume?.refrain || '';
+    const texteComplet = psaume?.texte || '';
 
-    const psaume = lit.psaume;
-    const reference = psaume.reference || '';
-    const refrain = psaume.refrain || '';
-    const texteComplet = psaume.texte || '';
-
-    const repons = refrain.trim().length
+    const repons = (refrain && refrain.trim().length)
       ? refrain.trim()
       : extractRepons(texteComplet);
 
-    if (!repons) {
-      return res.status(404).json({ error: 'Répons introuvable.' });
+    return {
+      texte: repons || '',           // ← UNIQUEMENT le répons
+      reference: reference || '',    // ← Référence du psaume
+      date: payload?.date || effectiveDate,
+      informations: payload?.informations || null,
+      source: 'aelf:lectures'
+    };
+  };
+
+  try {
+    const payload = isDefaultZone
+      ? await AELFService.getLiturgicalData(requestedDate || undefined)
+      : await AELFService.fetchFromAELF(effectiveDate, normalizedZone);
+
+    if (payload?.psaume) {
+      return res.json(buildResponse(payload));
     }
 
-    return res.json({
-      repons: {
-        texte: repons,
-        reference: reference,
-        date: effectiveDate,
-      }
-    });
+    // Fallback : retente France+cache si zone exotique vide
+    const fallback = await AELFService.getLiturgicalData(requestedDate || undefined);
+    if (fallback?.psaume) {
+      return res.json(buildResponse(fallback));
+    }
 
-  } catch (e) {
-    console.error('[paroledujour] Error:', e);
-    return res.status(500).json({ error: 'paroledujour_failed' });
+    return res.status(503).json({ error: 'Psaume indisponible.' });
+  } catch (error) {
+    console.error('[/api/paroledujour] error:', error?.message || error);
+    try {
+      const fallback = await AELFService.getLiturgicalData(requestedDate || undefined);
+      if (fallback?.psaume) {
+        return res.json(buildResponse(fallback));
+      }
+    } catch (fallbackErr) {
+      console.error('[/api/paroledujour] fallback error:', fallbackErr?.message || fallbackErr);
+    }
+    return res.status(503).json({ error: 'Service temporairement indisponible' });
   }
 });
 
