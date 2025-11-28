@@ -4,7 +4,7 @@
 const axios = require('axios');
 const fs = require('fs');
 const path = require('path');
-
+const cheerio = require('cheerio');
 class AELFService {
   constructor() {
     this.baseURL = 'https://api.aelf.org/v1';
@@ -183,12 +183,12 @@ class AELFService {
   }
 
   /**
-   * Fallback Laudes → psaume
+   * Fallback messe→ psaume
    */
   async fetchPsalmFallbackLaudes(date, country = 'france') {
     const zone = this.normalizeZone(country);
     try {
-      const url = `${this.baseURL}/laudes/${date}/${zone}`;
+      const url = `${this.baseURL}/messe/${date}/${zone}`;
       const response = await axios.get(url, { timeout: 8000 });
       const data = response.data;
       if (!data) return null;
@@ -206,6 +206,63 @@ class AELFService {
 
     } catch (err) {
       console.error('[AELF Laudes] Fallback impossible:', err.message);
+      return null;
+    }
+  }
+  /**
+   * Scraper HTML AELF → extraction du répons du psaume
+   */
+  async fetchPsalmFromHTML(date, country = 'france') {
+    const zone = this.normalizeZone(country);
+    const url = `https://aelf.org/${date}/messe`;
+
+    try {
+      console.log(`[AELF HTML] Scraping du psaume pour ${date} (${zone})`);
+
+      const response = await axios.get(url, { timeout: 8000 });
+      const html = response.data;
+
+      if (typeof html !== 'string') return null;
+
+      const $ = cheerio.load(html);
+
+      const psHeader = $('h3').filter((i, el) =>
+        $(el).text().toLowerCase().includes('psaume')
+      ).first();
+
+      if (!psHeader || psHeader.length === 0) return null;
+
+      const container = psHeader.nextUntil('h3');
+
+      let reference = '';
+      let refrain = '';
+      let contenu = '';
+
+      container.each((i, el) => {
+        const text = $(el).text().trim();
+        if (!text) return;
+
+        if (text.match(/^Psaume/i) || text.match(/^Ps /i)) {
+          reference = text;
+        }
+
+        if (text.startsWith('R/')) {
+          refrain = text.replace(/^R\/\s*/, '').trim();
+        }
+
+        contenu += text + '\n';
+      });
+
+      if (!refrain) return null;
+
+      return {
+        reference,
+        refrain,
+        texte: contenu.trim()
+      };
+
+    } catch (err) {
+      console.error('[AELF HTML] Erreur de scraping:', err.message);
       return null;
     }
   }
@@ -255,13 +312,22 @@ class AELFService {
       throw error;
     }
 
-    // 3 — Si API JSON sans psaume → fallback
-    if (!fresh.psaume) {
-      const fallbackP = await this.fetchPsalmFallbackLaudes(targetDate, zone);
-      if (fallbackP) {
-        fresh.psaume = fallbackP;
-      }
+  // 3️⃣ Si API JSON fonctionne mais psaume absent : fallback Laudes
+  if (!fresh.psaume) {
+    const fallbackPsalm = await this.fetchPsalmFallbackLaudes(targetDate, zone);
+    if (fallbackPsalm) {
+      fresh.psaume = fallbackPsalm;
+      console.log('[AELF] Psaume ajouté via fallback Laudes');
     }
+  }
+ // 3️⃣ bis – Si toujours pas de psaume → fallback HTML
+  if (!fresh.psaume) {
+    const htmlPsalm = await this.fetchPsalmFromHTML(targetDate, zone);
+    if (htmlPsalm) {
+      fresh.psaume = htmlPsalm;
+      console.log('[AELF] Psaume récupéré via HTML scraping');
+    }
+  }
 
     // 4 — cache + retour
     this.writeCache(cacheFile, fresh);
