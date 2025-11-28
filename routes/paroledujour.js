@@ -64,12 +64,7 @@ router.get('/', async (req, res) => {
     }
 
     // Fallback : retente France+cache si zone exotique vide
-    const fallback = await AELFService.getLiturgicalData(requestedDate || undefined);
-    if (fallback?.psaume) {
-      return res.json(buildResponse(fallback));
-    }
-
-    return res.status(503).json({ error: 'Psaume indisponible.' });
+    return res.status(503).json({ error: 'Psaume indisponible (AELF + fallback HTML)' });
   } catch (error) {
     console.error('[/api/paroledujour] error:', error?.message || error);
     try {
