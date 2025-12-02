@@ -61,16 +61,16 @@ async function stripeWebhookHandler(req, res) {
         credits.updatePaymentSession(session.id, "completed");
         console.log(`🙏 Don confirmé : ${(amount / 100).toFixed(2)}€ — ${session.id}`);
 
-        // 🎁 BONUS pour dons ≥ 40€
-        if (userId && amount >= 4000) {
+        // 🎁 BONUS pour dons ≥ 50€
+        if (userId && amount >= 5000) {
           credits.addCredits(
             userId,
-            100,
+            90,
             "donation_bonus",
             session.id,
-            "Bonus 100 crédits (don ≥ 40€)"
+            "Bonus 90 crédits (don ≥ 50€)"
           );
-          console.log(`🎁 Bonus appliqué : +100 crédits pour user ${userId}`);
+          console.log(`🎁 Bonus appliqué : +90 crédits pour user ${userId}`);
         }
 
         return res.json({ received: true });

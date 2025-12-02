@@ -353,6 +353,7 @@ class AELFService {
       informations: data.informations
     };
   }
+  
 
   /**
    * Parole du jour = répons du psaume
