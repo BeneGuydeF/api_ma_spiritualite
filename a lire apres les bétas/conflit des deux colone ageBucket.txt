@@ -1,0 +1,75 @@
+Voici un README court, clair et professionnel, à mettre dans ton dossier routes/account/ ou à la racine du mini-back pour documenter proprement la situation.
+Il explique pourquoi deux colonnes existent, comment le backend gère la transition, et comment faire le ménage plus tard.
+
+📄 README — Gestion des colonnes age_bucket et ageBucket
+🎯 Contexte
+
+Dans la table users, deux colonnes historisent la même information :
+
+age_bucket → colonne officielle (convention snake_case)
+
+ageBucket → colonne héritée, créée accidentellement lors d’une ancienne version du flux d’inscription.
+
+Pour éviter toute régression dans l’application, les deux colonnes sont encore présentes dans la base.
+
+✔️ Comportement actuel du backend (sécurisé et cohérent)
+Lecture
+
+Le backend lit la valeur via :
+
+COALESCE(age_bucket, ageBucket) AS ageBucket
+
+
+→ Cela garantit que l’API renvoie toujours une valeur cohérente, même si certains comptes anciens n’ont pas encore la colonne normalisée.
+
+Écriture
+
+La mise à jour d’un profil modifie uniquement :
+
+age_bucket
+
+
+La colonne camelCase ageBucket n’est plus jamais modifiée.
+Elle continue simplement à exister pour compatibilité et pour éviter de casser d’anciens comptes.
+
+🔄 Situation actuelle : stable pour la production
+
+Aucun bug.
+
+Aucune ambiguïté côté front.
+
+Aucun impact sur la connexion, le compte utilisateur ou les journaux.
+
+Pas de migration urgente nécessaire.
+
+C’est la solution la plus sûre pendant la phase bêta.
+
+🧹 Nettoyage possible (optionnel)
+
+Quand le projet sera stabilisé, il sera possible de :
+
+Copier les valeurs résiduelles depuis ageBucket vers age_bucket (au cas où).
+
+Supprimer définitivement la colonne ageBucket.
+
+Cela nécessite une petite migration SQLite :
+
+UPDATE users
+SET age_bucket = COALESCE(age_bucket, ageBucket);
+
+ALTER TABLE users DROP COLUMN ageBucket;
+
+
+⚠️ DROP COLUMN n’existe pas nativement dans SQLite.
+Il faudra passer par une migration standard (recreate table).
+Une version prête à l'emploi sera fournie si nécessaire.
+
+📝 Conclusion
+
+Le backend fonctionne parfaitement avec les deux colonnes.
+
+Aucune urgence à migrer.
+
+Une suppression future de ageBucket est recommandée mais non obligatoire.
+
+La logique actuelle est propre, cohérente et sûre pour la production.

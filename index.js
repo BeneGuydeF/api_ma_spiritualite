@@ -99,7 +99,14 @@ try {
   app.use('/api/priere', priereRoute);
   console.log('✅ Route /api/priere chargée');
 } catch (e) { console.log('⚠️ Route prière non disponible:', e.message); }
-
+// Auth login
+try {
+  const authLoginRoute = require('./routes/auth.login.js');
+  app.use('/api/auth', authLoginRoute);
+  console.log('✅ Route /api/auth/login chargée');
+} catch (e) {
+  console.log('⚠️ Route auth.login non disponible :', e.message);
+}
 // Journal sécurisé
 let journalSecureRoute = null;
 try {
