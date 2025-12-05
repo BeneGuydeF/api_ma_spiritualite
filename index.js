@@ -185,6 +185,19 @@ app.use((req, res) => {
   res.status(404).json({ error: 'Not Found', path: req.path });
 });
 
+// ==========================
+// Route de debug : liste des routes montées
+// ==========================
+const listEndpoints = require('express-list-endpoints');
+
+app.get('/api/_debug/routes', (req, res) => {
+  try {
+    res.json(listEndpoints(app));
+  } catch (e) {
+    res.json({ error: e.message });
+  }
+});
+
 // Start server
 app.listen(port, '0.0.0.0', () => {
   console.log(`✅ Serveur Ma Spiritualité démarré sur le port ${port}`);
