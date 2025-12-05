@@ -107,6 +107,16 @@ try {
 } catch (e) {
   console.log('⚠️ Route auth.login non disponible :', e.message);
 }
+
+// Auth signup
+try {
+  const authSignupRoute = require('./routes/auth.signup.js');
+  app.use('/api/auth', authSignupRoute);
+  console.log('✅ Route /api/auth/signup chargée');
+} catch (e) {
+  console.log('⚠️ Route auth.signup non disponible :', e.message);
+}
+
 // Journal sécurisé
 let journalSecureRoute = null;
 try {
@@ -154,6 +164,7 @@ try {
 } catch (e) { console.log('⚠️ Route donations non disponible:', e.message); }
 
 // Account
+
 app.use('/api/account', accountPrivacy);
 app.use('/api/account', accountMe);
 app.use('/api/account', accountPassword);
