@@ -51,9 +51,9 @@ router.get('/health', (_req, res) => res.json({ ok: true, route: '/api/enfants/h
 // --- IA principale ---
 router.post('/', async (req, res) => {
   const { prompt, ageRange, reference, theme } = req.body || {};
-  if (!prompt || typeof prompt !== 'string' || !prompt.trim()) {
-    return res.status(400).json({ error: 'prompt manquant' });
-  }
+if (!ageRange || !reference) {
+  return res.status(400).json({ error: 'ageRange ou reference manquant' });
+}
 
   const rage = (ageRange || '').toLowerCase();
   let age = '7-9';
