@@ -4,7 +4,7 @@ const bodyParser = require('body-parser');
 const cors = require('cors');
 const rateLimit = require('express-rate-limit');
 const listEndpoints = require('express-list-endpoints');
-const accountPrivacy = require('./routes/account/account.privacy.js');
+//const accountPrivacy = require('./routes/account/account.privacy.js');
 const app = express();
 const port = process.env.PORT || 3013;
 
@@ -166,7 +166,7 @@ try {
 
 // Account
 
-app.use('/api/account', accountPrivacy);
+//app.use('/api/account', accountPrivacy);
 app.use('/api/account', accountMe);
 app.use('/api/account', accountPassword);
 app.use('/api/account', accountCredits);
