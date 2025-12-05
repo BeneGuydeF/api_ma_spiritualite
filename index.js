@@ -35,13 +35,14 @@ app.use(bodyParser.json({ limit: '1mb' }));
 // ============================
 // AUTH — doit être AVANT les paiements
 // ============================
-try {
-  const authCarnetRoute = require('./routes/auth.carnet');
-  app.use('/api/auth', authCarnetRoute);
-  console.log('✅ Route /api/auth chargée (PUBLIC)');
-} catch (e) {
-  console.log('⚠️ Route auth.carnet non disponible:', e.message);
-}
+//try {
+//  const authCarnetRoute = require('./routes/auth.carnet');
+//  app.use('/api/auth', authCarnetRoute);
+// console.log('✅ Route /api/auth chargée (PUBLIC)');
+//} catch (e) {
+//  console.log('⚠️ Route auth.carnet non disponible:', e.message);
+console.log('⛔ Route old auth.carnet désactivée');
+//}
 
 // ============================
 // IMPORT MISSING — ACCOUNT ROUTES
