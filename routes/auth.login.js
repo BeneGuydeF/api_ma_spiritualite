@@ -1,7 +1,7 @@
 // routes/auth.login.js — GROS BACK (CommonJS)
 
 const express = require('express');
-const bcrypt = require('bcrypt');
+const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const db = require('../db/sqlite'); // même DB que ton account.* et journal_secure
 
