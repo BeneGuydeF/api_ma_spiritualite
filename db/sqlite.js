@@ -16,18 +16,21 @@ console.log('[SQLite] Using DB at:', dbPath);
 
 const db = new Database(dbPath);
 
-// Schéma minimal (idempotent)
+// Initialisation des tables si besoin
 db.exec(`
 PRAGMA journal_mode = WAL;
 CREATE TABLE IF NOT EXISTS users (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   email TEXT NOT NULL UNIQUE,
   passwordHash TEXT NOT NULL,
-  ageBucket TEXT,
-  secretQuestion TEXT,
-  secretAnswerHash TEXT,
+  name TEXT,
+  age_bucket TEXT,
+  theme TEXT DEFAULT 'system',
+  analytics INTEGER DEFAULT 0,
   credits INTEGER DEFAULT 0,
   encryptionSalt TEXT,
+  secretQuestion TEXT,
+  secretAnswerHash TEXT,
   createdAt TEXT NOT NULL,
   updatedAt TEXT NOT NULL
 );
