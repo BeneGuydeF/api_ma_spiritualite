@@ -3,7 +3,7 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const db = require('../db/sqlite'); // même DB que ton account.* et journal_secure
+const db = require('../db/sqlite'); // même DB que account.* et journal_secure
 
 const router = express.Router();
 const SECRET = process.env.JWT_SECRET || 'change-me';
@@ -18,9 +18,9 @@ router.post('/login', async (req, res) => {
     // Normalisation
     const e = String(email || '').trim().toLowerCase();
 
-    // On récupère l'utilisateur cloud
+    // On récupère l’utilisateur cloud
     const row = db.prepare(`
-      SELECT id, email, password_hash, credits, age_bucket
+      SELECT id, email, passwordHash, credits, ageBucket
       FROM users
       WHERE email = ?
     `).get(e);
@@ -29,7 +29,7 @@ router.post('/login', async (req, res) => {
       return res.status(401).json({ error: 'Identifiants invalides.' });
     }
 
-    const ok = await bcrypt.compare(password, row.password_hash);
+    const ok = await bcrypt.compare(password, row.passwordHash);
     if (!ok) {
       return res.status(401).json({ error: 'Identifiants invalides.' });
     }
@@ -47,7 +47,7 @@ router.post('/login', async (req, res) => {
         id: row.id,
         email: row.email,
         credits: row.credits,
-        ageBucket: row.age_bucket
+        ageBucket: row.ageBucket
       }
     });
 
