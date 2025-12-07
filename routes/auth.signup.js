@@ -1,9 +1,9 @@
 // routes/auth.signup.js — GROS BACK (CommonJS)
 
 const express = require('express');
-const bcrypt = require('bcryptjs');
+const bcrypt = require('bcryptjs'); // plus simple + sync
 const jwt = require('jsonwebtoken');
-const db = require('../db/sqlite'); // même DB que login
+const db = require('../db/sqlite');
 const router = express.Router();
 
 const SECRET = process.env.JWT_SECRET || 'change-me';
@@ -26,31 +26,45 @@ router.post('/signup', async (req, res) => {
       });
     }
 
-    const e = String(email).trim().toLowerCase();
+    const normalized = String(email).trim().toLowerCase();
 
     // Vérifier si l’utilisateur existe déjà
-    const existing = db.prepare(`
-      SELECT id FROM users WHERE email = ?
-    `).get(e);
-
+    const existing = db.prepare(`SELECT id FROM users WHERE email = ?`).get(normalized);
     if (existing) {
       return res.status(409).json({ error: 'Cet email est déjà utilisé.' });
     }
 
-    // Hash
-    const hash = await bcrypt.hash(password, 12);
+    const hash = bcrypt.hashSync(password, 12);
+    const now = new Date().toISOString();
 
-    // Création user cloud
-    const result = db.prepare(`
-      INSERT INTO users (email, password_hash, credits, age_bucket)
-      VALUES (?, ?, 60, NULL)
-    `).run(e, hash);
+    // INSERT adapté au schéma SQLite actuel
+    const stmt = db.prepare(`
+      INSERT INTO users (
+        email,
+        passwordHash,
+        age_bucket,
+        credits,
+        encryptionSalt,
+        createdAt,
+        updatedAt
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `);
+
+    const result = stmt.run(
+      normalized,
+      hash,
+      null,       // age_bucket
+      60,         // crédits gratuits
+      null,       // encryptionSalt pour plus tard
+      now,
+      now
+    );
 
     const id = result.lastInsertRowid;
 
-    // Token CLOUD
     const token = jwt.sign(
-      { sub: id, email: e, scope: 'cloud' },
+      { sub: id, email: normalized, scope: 'cloud' },
       SECRET,
       { expiresIn: '7d' }
     );
@@ -60,15 +74,15 @@ router.post('/signup', async (req, res) => {
       token,
       user: {
         id,
-        email: e,
+        email: normalized,
         credits: 60,
         ageBucket: null
       }
     });
 
   } catch (err) {
-    console.error('Erreur signup cloud :', err);
-    return res.status(500).json({ error: 'Erreur interne.' });
+    console.error("Erreur signup cloud :", err);
+    return res.status(500).json({ error: "Erreur interne." });
   }
 });
 

@@ -12,7 +12,7 @@ const selUser = db.prepare(`
   SELECT id,
          email,
          name,
-         COALESCE(age_bucket, ageBucket) AS ageBucket,
+         age_bucket AS ageBucket,
          theme,
          analytics,
          credits
