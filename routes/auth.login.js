@@ -20,10 +20,14 @@ router.post('/login', async (req, res) => {
 
     // On récupère l’utilisateur cloud
     const row = db.prepare(`
-      SELECT id, email, passwordHash, credits, ageBucket
-      FROM users
-      WHERE email = ?
-    `).get(e);
+   SELECT id,
+          email,
+          passwordHash,
+          credits,
+          age_bucket AS ageBucket
+   FROM users
+   WHERE email = ?
+ `).get(e);
 
     if (!row) {
       return res.status(401).json({ error: 'Identifiants invalides.' });
