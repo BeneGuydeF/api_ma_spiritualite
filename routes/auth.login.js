@@ -3,10 +3,18 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const db = require('../db/sqlite'); // même DB que account.* et journal_secure
+const db = require('../db/sqlite');
 
 const router = express.Router();
-const SECRET = process.env.JWT_SECRET || 'change-me';
+
+// Le secret DOIT être identique et obligatoire
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET || JWT_SECRET.length < 32) {
+  throw new Error("JWT_SECRET missing or too short");
+}
+
+// Aligné sur middleware/auth.js
+const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
 
 router.post('/login', async (req, res) => {
   try {
@@ -15,19 +23,17 @@ router.post('/login', async (req, res) => {
       return res.status(400).json({ error: 'Email et mot de passe requis.' });
     }
 
-    // Normalisation
-    const e = String(email || '').trim().toLowerCase();
+    const e = String(email).trim().toLowerCase();
 
-    // On récupère l’utilisateur cloud
     const row = db.prepare(`
-   SELECT id,
-          email,
-          passwordHash,
-          credits,
-          age_bucket AS ageBucket
-   FROM users
-   WHERE email = ?
- `).get(e);
+      SELECT id,
+             email,
+             passwordHash,
+             credits,
+             age_bucket AS ageBucket
+      FROM users
+      WHERE email = ?
+    `).get(e);
 
     if (!row) {
       return res.status(401).json({ error: 'Identifiants invalides.' });
@@ -38,10 +44,20 @@ router.post('/login', async (req, res) => {
       return res.status(401).json({ error: 'Identifiants invalides.' });
     }
 
+    // TOKEN 100% COMPATIBLE AVEC middleware/auth.js
     const token = jwt.sign(
-      { sub: row.id, email: row.email, scope: 'cloud' },
-      SECRET,
-      { expiresIn: '7d' }
+      {
+        userId: row.id,
+        email: row.email,
+        iat: Math.floor(Date.now() / 1000),
+        jti: require('crypto').randomBytes(16).toString('hex')
+      },
+      JWT_SECRET,
+      {
+        expiresIn: JWT_EXPIRES_IN,
+        issuer: 'ma-spiritualite-api',
+        audience: 'ma-spiritualite-app'
+      }
     );
 
     return res.json({
