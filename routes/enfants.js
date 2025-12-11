@@ -2,7 +2,7 @@ const express = require('express');
 const OpenAI = require('openai');
 const router = express.Router();
 
-console.log('✅ routes/enfants.js (IA + prompt original) chargé');
+console.log('✅ routes/enfants.js (IA + prompt original + streaming) chargé');
 
 // --- INIT OpenAI ---
 let _openai = null;
@@ -10,11 +10,11 @@ function getOpenAI() {
   if (_openai) return _openai;
   const key = process.env.OPENAI_API_KEY || process.env.OPENAI_KEY || '';
   if (!key) return null;
-  _openai = new OpenAI({ apiKey: key });
+  _openai = new OpenAI({ apiKey: key, timeout: 8000 });
   return _openai;
 }
 
-// --- Génération SVG (illustration simple selon thème) ---
+// --- Génération SVG (identique à ton code, inchangé) ---
 function buildMonochromeSvg({ theme, reference, ageRange }) {
   const t = (theme || '').toLowerCase();
   let inner = '';
@@ -48,13 +48,15 @@ function buildMonochromeSvg({ theme, reference, ageRange }) {
 router.get('/', (_req, res) => res.json({ ok: true, route: '/api/enfants' }));
 router.get('/health', (_req, res) => res.json({ ok: true, route: '/api/enfants/health' }));
 
-// --- IA principale ---
+// --- IA principale AVEC STREAMING ---
 router.post('/', async (req, res) => {
   const { prompt, ageRange, reference, theme } = req.body || {};
-if (!ageRange || !reference) {
-  return res.status(400).json({ error: 'ageRange ou reference manquant' });
-}
 
+  if (!ageRange || !reference) {
+    return res.status(400).json({ error: 'ageRange ou reference manquant' });
+  }
+
+  // Détermination stricte de la tranche d'âge
   const rage = (ageRange || '').toLowerCase();
   let age = '7-9';
   if (/^4/.test(rage)) age = '4-6';
@@ -70,48 +72,58 @@ if (!ageRange || !reference) {
   const client = getOpenAI();
   if (!client) return res.status(503).json({ error: 'OpenAI non configuré' });
 
+  // --- EN-TÊTES STREAMING ---
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  res.flushHeaders();
+
   try {
-    const completion = await client.chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages: [
-        {
-          role: 'system',
-          content:
-             "Vous expliquez l'Évangile du jour aux enfants avec exactitude et délicatesse." +
-          "Vous vous adressez à des enfants de CSP+, avec une culture religieuse en cours d'acquisition." +
-          "Adaptez le vocabulaire à la tranche d'âge sans infantiliser."+
-          "Toujours respecter le texte et éviter les interprétations hasardeuses."+
-          "Structure: 1) Résumé 3–5 phrases; 2) Idée clé; 3) Deux questions; 4) Petite prière." +
-          "Expliquez comment lire les versets et se repérer dans la Bible." +
-          "Langue: français ; style simple, digne et clair; vouvoyez l'usager."
-        },
-        { role: 'user', content: userPrompt },
-      ],
-      max_tokens: 750,
-      temperature: 0.5,
-    });
+    // Lancement du streaming OpenAI
+    const stream = await client.chat.completions.create(
+      {
+        model: 'gpt-4o-mini',
+        messages: [
+          {
+            role: 'system',
+            content:
+              "Vous expliquez l'Évangile du jour aux enfants avec exactitude et délicatesse." +
+              "Vous vous adressez à des enfants de CSP+, avec une culture religieuse en cours d'acquisition." +
+              "Adaptez le vocabulaire à la tranche d'âge sans infantiliser." +
+              "Toujours respecter le texte et éviter les interprétations hasardeuses." +
+              "Structure: 1) Résumé 3–5 phrases; 2) Idée clé; 3) Deux questions; 4) Petite prière, Dieu doit etre vouvoyé." +
+              "Expliquez comment lire les versets et se repérer dans la Bible." +
+              "Langue: français ; style simple, digne et clair; vouvoyez l'usager."
+          },
+          { role: 'user', content: userPrompt },
+        ],
+        max_tokens: 750,
+        temperature: 0.5,
+      },
+      { stream: true, timeout: 8000 }
+    );
 
-    const content = completion?.choices?.[0]?.message?.content || '';
+    // Envoi progressif des tokens
+    for await (const chunk of stream) {
+      const token = chunk.choices?.[0]?.delta?.content || "";
+      res.write(token);
+    }
+
+    // --- ENVOI FINAL : illustration ---
     const svg = buildMonochromeSvg({ theme, reference, ageRange: age });
-    const illustration = {
-      type: 'svg',
-      data: Buffer.from(svg, 'utf8').toString('base64'),
-    };
+    const illustration = Buffer.from(svg, 'utf8').toString('base64');
 
-    res.json({
-      response: content,
-      illustration,
-      ageRange: age,
-      reference,
-      theme,
-    });
+    res.write(`\n\n[ILLUSTRATION_BASE64]${illustration}`);
+    res.end();
+
   } catch (err) {
     console.error('Erreur IA enfants:', err?.response?.data || err.message);
-    res.status(500).json({ error: 'Erreur lors de la communication avec l’IA' });
+    res.write("ERREUR: Impossible de générer la réponse.");
+    res.end();
   }
 });
 
-// --- POST /evaluer (diagnostic local sans IA) ---
+// --- POST /evaluer ---
 router.post('/evaluer', (req, res) => {
   const { age, theme, texte } = req.body || {};
   res.json({
