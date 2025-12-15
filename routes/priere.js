@@ -86,23 +86,14 @@ router.post('/', async (req, res) => {
     ? blog.map(b => `• [BLOG] ${b.title} — ${b.url}\n${b.excerpt}`).join('\n\n')
     : 'Aucun article local pertinent.';
 
-  // --- HEADERS STREAMING ---
-  res.setHeader("Content-Type", "text/event-stream");
-  res.setHeader("Cache-Control", "no-cache");
-  res.setHeader("Connection", "keep-alive");
-  res.flushHeaders();
-
   try {
-
-    // --- STREAMING OPENAI ---
-    const stream = await openai.chat.completions.create(
-      {
-        model: 'gpt-4o-mini',
-        temperature: 0.3,
-        max_tokens: 900,
-        messages: [
-          {
-            role: 'system',
+    const completion = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      temperature: 0.3,
+      max_tokens: 900,
+      messages: [
+        {
+          role: 'system',
             content:
 `Assistant spirituel discret, savant et rigoureux pour un public cultivé.
 Style impératif: sobre, impersonnel, précis, inspirant. Ne jamais s’adresser à la 2e personne, ne pas utiliser « je », « tu » ni points de liste.
@@ -126,40 +117,31 @@ Contraintes:
 `QUESTION UTILISATEUR:
 ${prompt}
 
-CONTEXTE – BIBLE CRAMPON (si disponible):
+CONTEXTE – BIBLE CRAMPON (si disponible) :
 ${cramponBlock}
 
-CONTEXTE – BLOG INTERNE (si disponible):
+CONTEXTE – BLOG INTERNE (si disponible) :
 ${blogBlock}
 
-Consigne: produire une réponse en trois parties, sans listes ni numérotation, en respectant strictement les contraintes de style ci-dessus.`
-          }
-        ]
-      },
-      { stream: true, timeout: 15000 }
-    );
+Consigne : produire une réponse conforme aux contraintes ci-dessus.`
+        }
+      ]
+    });
 
-    // --- ÉMISSION PROGRESSIVE DES TOKENS ---
-    for await (const chunk of stream) {
-  let token = chunk.choices?.[0]?.delta?.content || "";
+    const answer = completion.choices[0].message.content;
 
-  // ⛔ Nettoyage des marqueurs parasites
-  token = token
-    .replace(/\bRéponse\s*:\s*/gi, '')
-    .replace(/\bResponse\s*:\s*/gi, '')
-    .replace(/\bS\d+\b\s*[:\-–—]?\s*/g, '')
-    .replace(/^\s*[:\-–—]\s*/g, '');
-
-  res.write(token);
-}
-
-    res.end();
+    return res.json({
+      response: answer,
+    });
 
   } catch (error) {
     console.error('Erreur IA :', error.response?.data || error.message);
-    res.write("ERREUR: Impossible de générer la prière.");
-    res.end();
+
+    return res.status(500).json({
+      error: 'Impossible de générer la prière.',
+    });
   }
+  
 });
 
 module.exports = router;
