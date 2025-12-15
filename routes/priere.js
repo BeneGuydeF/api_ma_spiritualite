@@ -141,9 +141,17 @@ Consigne: produire une réponse en trois parties, sans listes ni numérotation, 
 
     // --- ÉMISSION PROGRESSIVE DES TOKENS ---
     for await (const chunk of stream) {
-      const token = chunk.choices?.[0]?.delta?.content || "";
-      res.write(token);
-    }
+  let token = chunk.choices?.[0]?.delta?.content || "";
+
+  // ⛔ Nettoyage des marqueurs parasites
+  token = token
+    .replace(/\bRéponse\s*:\s*/gi, '')
+    .replace(/\bResponse\s*:\s*/gi, '')
+    .replace(/\bS\d+\b\s*[:\-–—]?\s*/g, '')
+    .replace(/^\s*[:\-–—]\s*/g, '');
+
+  res.write(token);
+}
 
     res.end();
 
