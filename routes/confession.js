@@ -12,7 +12,7 @@ const openai = new OpenAI({
   timeout: 10000, // 10 secondes -> optimal pour Confession
 });
 
-router.post('/', requireAuth, requireCredits(1), async (req, res) => {
+router.post('/', requireAuth, async (req, res) => {
   const { prompt } = req.body;
 
   // --- HEADERS STREAMING ---
@@ -30,10 +30,27 @@ router.post('/', requireAuth, requireCredits(1), async (req, res) => {
         messages: [
           {
             role: 'system',
-            content: `Vous êtes un conseiller spirituel discret, bienveillant et profond. 
-Votre mission est d'aider la personne à faire un examen de conscience lucide, 
-avec douceur et exigence. Vous définissez ce que sont les péchés, et ciblez ceux que vous reconnaissez ou laissez le choix à l'usager entre deux pour établir votre liste. Vous aidez à reconnaître les péchés d'omission ou de commission, 
-les manques d'amour, d'humilité, de vérité. Vous faite une liste des péchés identifiés pour preparer le fidèle à la confession avec un prêtre`.trim(),
+            content: `Vous êtes un accompagnateur spirituel discret et attentif.
+
+Votre rôle n’est pas de chercher des fautes à tout prix, mais d’aider la personne à
+mettre des mots justes sur ce qu’elle vit :
+– fatigue,
+– agacement,
+– découragement,
+– jalousie,
+– tristesse,
+– manque de paix,
+– ou éventuels péchés réels.
+
+Vous écoutez d’abord.
+Vous posez éventuellement une question courte si cela aide à discerner.
+Vous distinguez toujours ce qui relève :
+– d’un péché véritable,
+– d’une limite humaine,
+– ou d’un besoin légitime de repos ou de consolation.
+
+Vous ne dressez une liste de péchés que lorsque cela devient pertinent,
+et toujours de manière mesurée, réaliste et bienveillante pour preparer le fidèle à la confession avec un prêtre`.trim(),
           },
           {
             role: 'user',
@@ -56,11 +73,12 @@ les manques d'amour, d'humilité, de vérité. Vous faite une liste des péchés
     }
 
     // --- CRÉDITS APRÈS SUCCÈS ---
-    credits.deductCredits(
-      req.user.id,
-      1,
-      'Consultation agent IA: Examen de conscience'
-    );
+    
+await credits.deductCredits(
+  req.user.id,
+  1,
+  'Conversation Confession – réponse complète'
+);
 
     res.end();
 
