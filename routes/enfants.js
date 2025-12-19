@@ -4,6 +4,7 @@ const router = express.Router();
 
 console.log('✅ routes/enfants.js (IA + prompt original + streaming) chargé');
 
+
 // --- INIT OpenAI ---
 let _openai = null;
 function getOpenAI() {
@@ -48,13 +49,31 @@ function buildMonochromeSvg({ theme, reference, ageRange }) {
 router.get('/', (_req, res) => res.json({ ok: true, route: '/api/enfants' }));
 router.get('/health', (_req, res) => res.json({ ok: true, route: '/api/enfants/health' }));
 
+
 // --- IA principale AVEC STREAMING ---
-router.post('/', async (req, res) => {
+router.post('/stream', async (req, res) => {
   const { prompt, ageRange, reference, theme } = req.body || {};
 
   if (!ageRange || !reference) {
-    return res.status(400).json({ error: 'ageRange ou reference manquant' });
-  }
+  res.write("ERREUR: ageRange ou reference manquant");
+  return res.end();
+}
+// --- EN-TÊTES STREAMING ---
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  res.flushHeaders();
+  
+  // --- HEARTBEAT SSE (évite coupure mobile/proxy) ---
+const heartbeat = setInterval(() => {
+  try {
+    res.write(" "); // ping léger
+  } catch (_) {}
+}, 15000);
+
+res.on("close", () => {
+  clearInterval(heartbeat);
+});
 
   // Détermination stricte de la tranche d'âge
   const rage = (ageRange || '').toLowerCase();
@@ -70,13 +89,11 @@ router.post('/', async (req, res) => {
   const userPrompt = [parts.join(' '), prompt].filter(Boolean).join('\n\n');
 
   const client = getOpenAI();
-  if (!client) return res.status(503).json({ error: 'OpenAI non configuré' });
-
-  // --- EN-TÊTES STREAMING ---
-  res.setHeader("Content-Type", "text/event-stream");
-  res.setHeader("Cache-Control", "no-cache");
-  res.setHeader("Connection", "keep-alive");
-  res.flushHeaders();
+if (!client) {
+  res.write("ERREUR: OpenAI non configuré");
+  return res.end();
+}
+  
 
   try {
     // Lancement du streaming OpenAI
@@ -100,7 +117,7 @@ router.post('/', async (req, res) => {
         max_tokens: 750,
         temperature: 0.5,
       },
-      { stream: true, timeout: 8000 }
+      { stream: true, timeout: 20000 }
     );
 
     // Envoi progressif des tokens
