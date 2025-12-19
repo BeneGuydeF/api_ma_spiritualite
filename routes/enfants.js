@@ -63,7 +63,7 @@ router.post('/stream', async (req, res) => {
   res.setHeader("Cache-Control", "no-cache");
   res.setHeader("Connection", "keep-alive");
   res.flushHeaders();
-  
+
   // --- HEARTBEAT SSE (évite coupure mobile/proxy) ---
 const heartbeat = setInterval(() => {
   try {
@@ -97,28 +97,32 @@ if (!client) {
 
   try {
     // Lancement du streaming OpenAI
-    const stream = await client.chat.completions.create(
-      {
-        model: 'gpt-4o-mini',
-        messages: [
-          {
-            role: 'system',
-            content:
-              "Vous expliquez l'Évangile du jour aux enfants avec exactitude et délicatesse." +
-              "Vous vous adressez à des enfants de CSP+, avec une culture religieuse en cours d'acquisition." +
-              "Adaptez le vocabulaire à la tranche d'âge sans infantiliser." +
-              "Toujours respecter le texte et éviter les interprétations hasardeuses." +
-              "Structure: 1) Résumé 3–5 phrases; 2) Idée clé; 3) Deux questions; 4) Petite prière, Dieu doit etre vouvoyé." +
-              "Expliquez comment lire les versets et se repérer dans la Bible." +
-              "Langue: français ; style simple, digne et clair; vouvoyez l'usager."
-          },
-          { role: 'user', content: userPrompt },
-        ],
-        max_tokens: 750,
-        temperature: 0.5,
-      },
-      { stream: true, timeout: 20000 }
-    );
+    const stream = await client.responses.stream({
+  model: "gpt-4o-mini",
+  input: [
+    {
+      role: "system",
+      content:
+        "Vous expliquez l'Évangile du jour aux enfants avec exactitude et délicatesse." +
+        "Vous vous adressez à des enfants de CSP+, avec une culture religieuse en cours d'acquisition." +
+        "Adaptez le vocabulaire à la tranche d'âge sans infantiliser." +
+        "Toujours respecter le texte et éviter les interprétations hasardeuses." +
+        "Structure: 1) Résumé 3–5 phrases; 2) Idée clé; 3) Deux questions; 4) Petite prière, Dieu doit etre vouvoyé." +
+        "Expliquez comment lire les versets et se repérer dans la Bible." +
+        "Langue: français ; style simple, digne et clair; vouvoyez l'usager."
+    },
+    {
+      role: "user",
+      content: userPrompt
+    }
+  ]
+});
+
+for await (const event of stream) {
+  if (event.type === "response.output_text.delta") {
+    res.write(event.delta);
+  }
+}
 
     // Envoi progressif des tokens
     for await (const chunk of stream) {
