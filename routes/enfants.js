@@ -48,12 +48,20 @@ function buildMonochromeSvg({ theme, reference, ageRange }) {
 router.get('/', (_req, res) => res.json({ ok: true, route: '/api/enfants' }));
 router.get('/health', (_req, res) => res.json({ ok: true, route: '/api/enfants/health' }));
 
-// --- IA principale ---
-router.post('/', async (req, res) => {
+
+router.post('/stream', async (req, res) => {
   const { prompt, ageRange, reference, theme } = req.body || {};
-if (!ageRange || !reference) {
-  return res.status(400).json({ error: 'ageRange ou reference manquant' });
-}
+
+  if (!ageRange || !reference) {
+    return res.status(400).json({ error: 'ageRange ou reference manquant' });
+  }
+
+   // 🔑 HEADERS STREAMING — ICI ET NULLE PART AILLEURS
+  res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+
+res.write(`Explique l’évangile ${reference} pour un enfant.\n`);
 
   const rage = (ageRange || '').toLowerCase();
   let age = '7-9';
@@ -98,13 +106,8 @@ if (!ageRange || !reference) {
       data: Buffer.from(svg, 'utf8').toString('base64'),
     };
 
-    res.json({
-      response: content,
-      illustration,
-      ageRange: age,
-      reference,
-      theme,
-    });
+   res.write(content);
+res.end();
   } catch (err) {
     console.error('Erreur IA enfants:', err?.response?.data || err.message);
     res.status(500).json({ error: 'Erreur lors de la communication avec l’IA' });
