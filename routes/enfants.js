@@ -1,7 +1,7 @@
 const express = require('express');
 const OpenAI = require('openai');
 const router = express.Router();
-
+const { generateHash } = require('../utils/crypto');
 console.log('✅ routes/enfants.js (IA + prompt original) chargé');
 
 // --- INIT OpenAI ---
@@ -14,42 +14,14 @@ function getOpenAI() {
   return _openai;
 }
 
-// --- Génération SVG (illustration simple selon thème) ---
-function buildMonochromeSvg({ theme, reference, ageRange }) {
-  const t = (theme || '').toLowerCase();
-  let inner = '';
 
-  if (t.includes('brebis') || t.includes('mouton') || t.includes('perdue')) {
-    inner = `<circle cx="64" cy="56" r="28" stroke="#000" stroke-width="4" fill="none"/>
-             <circle cx="52" cy="52" r="6" fill="#000"/>`;
-  } else if (t.includes('colombe') || t.includes('esprit')) {
-    inner = `<path d="M20 70 Q50 30 100 60" stroke="#000" stroke-width="4" fill="none"/>
-             <circle cx="22" cy="68" r="3" fill="#000"/>`;
-  } else if (t.includes('lumi') || t.includes('cierge') || t.includes('bougie')) {
-    inner = `<rect x="54" y="48" width="20" height="40" stroke="#000" stroke-width="4" fill="none"/>
-             <path d="M64 44 C60 40, 62 34, 64 32 C66 34, 68 40, 64 44" fill="#000"/>`;
-  } else if (t.includes('sem') || t.includes('grain') || t.includes('graines')) {
-    inner = `<circle cx="36" cy="64" r="12" stroke="#000" stroke-width="4" fill="none"/>
-             <circle cx="88" cy="82" r="2" fill="#000"/>`;
-  } else {
-    inner = `<rect x="24" y="40" width="80" height="40" stroke="#000" stroke-width="4" fill="none"/>`;
-  }
-
-  const subtitle = [reference, ageRange].filter(Boolean).join(' • ');
-  return `
-  <svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
-    <rect width="128" height="128" fill="#fff"/>
-    ${inner}
-    ${subtitle ? `<text x="64" y="116" font-size="10" text-anchor="middle" fill="#000">${subtitle}</text>` : ''}
-  </svg>`;
-}
 
 // --- Routes simples ---
 router.get('/', (_req, res) => res.json({ ok: true, route: '/api/enfants' }));
 router.get('/health', (_req, res) => res.json({ ok: true, route: '/api/enfants/health' }));
 
 
-router.post('/stream', async (req, res) => {
+router.post('/', async (req, res) => {
   const { prompt, ageRange, reference, theme } = req.body || {};
 
   if (!ageRange || !reference) {
@@ -57,11 +29,9 @@ router.post('/stream', async (req, res) => {
   }
 
    // 🔑 HEADERS STREAMING — ICI ET NULLE PART AILLEURS
-  res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-  res.setHeader('Cache-Control', 'no-cache');
-  res.setHeader('Connection', 'keep-alive');
+ 
 
-res.write(`Explique l’évangile ${reference} pour un enfant.\n`);
+
 
   const rage = (ageRange || '').toLowerCase();
   let age = '7-9';
@@ -75,8 +45,27 @@ res.write(`Explique l’évangile ${reference} pour un enfant.\n`);
   if (theme) parts.push(`Thème: ${theme}.`);
   const userPrompt = [parts.join(' '), prompt].filter(Boolean).join('\n\n');
 
-  const client = getOpenAI();
-  if (!client) return res.status(503).json({ error: 'OpenAI non configuré' });
+  const cacheKey = `ia|enfants|${generateHash(JSON.stringify({
+  reference,
+  ageRange: age,
+  theme,
+  prompt: userPrompt
+}))}`;
+
+const client = getOpenAI();
+if (!client) {
+  return res.status(503).json({ error: 'OpenAI non configuré' });
+}
+const row = db
+  .prepare('SELECT response FROM ia_cache WHERE cache_key = ?')
+  .get(cacheKey);
+
+if (row) {
+  return res.json({
+    response: row.response,
+    from: 'cache'
+  });
+}
 
   try {
     const completion = await client.chat.completions.create({
@@ -99,20 +88,26 @@ res.write(`Explique l’évangile ${reference} pour un enfant.\n`);
       temperature: 0.5,
     });
 
+  
     const content = completion?.choices?.[0]?.message?.content || '';
-    const svg = buildMonochromeSvg({ theme, reference, ageRange: age });
-    const illustration = {
-      type: 'svg',
-      data: Buffer.from(svg, 'utf8').toString('base64'),
-    };
+    db.prepare(`
+  INSERT OR REPLACE INTO ia_cache (cache_key, response)
+  VALUES (?, ?)
+`).run(cacheKey, content);
 
-   res.write(content);
-res.end();
-  } catch (err) {
-    console.error('Erreur IA enfants:', err?.response?.data || err.message);
-    res.status(500).json({ error: 'Erreur lors de la communication avec l’IA' });
-  }
+return res.json({
+  response: content,
+  from: 'ai'
 });
+
+ } catch (err) {
+  console.error('Erreur IA enfants:', err?.response?.data || err?.message || err);
+  return res.status(500).json({
+    error: 'Erreur lors de la génération IA'
+  });
+}
+});
+
 
 // --- POST /evaluer (diagnostic local sans IA) ---
 router.post('/evaluer', (req, res) => {
