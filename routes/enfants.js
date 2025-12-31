@@ -1,6 +1,7 @@
 const express = require('express');
 const OpenAI = require('openai');
 const router = express.Router();
+const db = require('../db/sqlite');
 const { generateHash } = require('../utils/crypto');
 
 console.log('✅ routes/enfants.js (IA + prompt original) chargé');
