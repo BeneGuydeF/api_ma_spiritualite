@@ -112,6 +112,15 @@ CREATE TABLE IF NOT EXISTS feedback_votes (
   FOREIGN KEY (userId) REFERENCES users(id),
   UNIQUE(feedbackId, userId)
 );
+CREATE TABLE IF NOT EXISTS ia_cache (
+  cache_key TEXT PRIMARY KEY,
+  response  TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_ia_cache_updated ON ia_cache(updated_at);
+
 `);
 
 module.exports = db;
