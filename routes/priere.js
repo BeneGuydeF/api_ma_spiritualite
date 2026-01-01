@@ -4,6 +4,8 @@ console.log("Route /api/priere chargée");
 const express = require('express');
 const router = express.Router();
 const OpenAI = require('openai');
+const mainDb = require('../db/sqlite');
+const { generateHash } = require('../utils/crypto');
 
 // --- DB facultative (Bible Crampon + Blog) ---------------------------------
 let db = null;
@@ -73,6 +75,23 @@ router.post('/', async (req, res) => {
   if (!prompt || !prompt.trim()) {
     return res.status(400).json({ error: 'prompt requis' });
   }
+  const normalizedPrompt = prompt.trim();
+
+  const cacheKey = `ia|priere|${generateHash(JSON.stringify({
+    prompt: normalizedPrompt,
+  }))}`;
+
+  try {
+    const row = mainDb
+      .prepare('SELECT response FROM ia_cache WHERE cache_key = ?')
+      .get(cacheKey);
+
+    if (row?.response) {
+      return res.json({ response: row.response, from: 'cache' });
+    }
+  } catch (e) {
+    console.warn('[priere] cache read failed:', e?.message || e);
+  }
 
   // Contexte local (si DB dispo)
   const crampon = getBibleCramponSnippets(prompt, 6);
@@ -129,10 +148,17 @@ Consigne : produire une réponse conforme aux contraintes ci-dessus.`
     });
 
     const answer = completion.choices[0].message.content;
+try {
+      mainDb.prepare(`
+        INSERT OR REPLACE INTO ia_cache (cache_key, response)
+        VALUES (?, ?)
+      `).run(cacheKey, answer);
+    } catch (e) {
+      console.warn('[priere] cache write failed:', e?.message || e);
+    }
 
-    return res.json({
-      response: answer,
-    });
+    return res.json({ response: answer, from: 'ai' });
+
 
   } catch (error) {
     console.error('Erreur IA :', error.response?.data || error.message);
