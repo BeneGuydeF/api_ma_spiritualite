@@ -94,15 +94,15 @@ router.post('/', async (req, res) => {
   }
 
   // Contexte local (si DB dispo)
-  const crampon = getBibleCramponSnippets(prompt, 6);
-  const blog = getBlogSnippets(prompt, 3);
+ const crampon = getBibleCramponSnippets(normalizedPrompt, 6);
+ const blog = getBlogSnippets(normalizedPrompt, 3);
 
   const cramponBlock = crampon.length
     ? crampon.map(v => `• [CRAMPON ${v.ref}] ${v.text}`).join('\n')
     : 'Aucun extrait local pertinent.';
 
   const blogBlock = blog.length
-    ? blog.map(b => `• [BLOG] ${b.title} — ${b.url}\n${b.excerpt}`).join('\n\n')
+    ? blog.map(b => `• [BLOG – ${b.title} — ${b.url}]\n${b.excerpt}`).join('\n\n')
     : 'Aucun article local pertinent.';
 
   try {
