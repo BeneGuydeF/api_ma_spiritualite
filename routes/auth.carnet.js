@@ -84,6 +84,11 @@ try {
   }
 });
 
+router.post('/login', loginRateLimit, (req, res, next) => {
+  req.url = '/carnet/login';
+  next();
+});
+
 // 2) LOGIN (ouvertures suivantes)
 // POST /api/auth/carnet/login { email, password }
 router.post('/carnet/login', loginRateLimit, async (req, res) => {
