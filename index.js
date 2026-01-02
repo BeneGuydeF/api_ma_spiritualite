@@ -23,10 +23,31 @@ const allowedOrigins = (process.env.CORS_ORIGIN || '')
   .map(s => s.trim())
   .filter(Boolean);
 
+
 app.use(cors({
   origin: allowedOrigins.length ? allowedOrigins : true,
   credentials: true,
 }));
+
+// ============================
+// IMPORT MISSING — ACCOUNT ROUTES
+// ============================
+const accountMe = require('./routes/account/account.me.js');
+const accountPassword = require('./routes/account/account.password.js');
+const accountCredits = require('./routes/account/account.credits.js');
+const accountPrivacy = require('./routes/account/account.privacy.js');
+
+// ============================
+// AUTH — doit être AVANT les paiements
+// ============================
+try {
+  const authCarnetRoute = require('./routes/auth.carnet');
+  app.use('/api/auth', authCarnetRoute);
+  console.log('✅ Route /api/auth chargée (PUBLIC)');
+} catch (e) {
+  console.log('⚠️ Route auth.carnet non disponible:', e.message);
+}
+
 
 // ============================
 // Payments (router + webhook)
@@ -169,6 +190,7 @@ if (journalSecureRoute) {
 }
 
 // AUTRES ROUTES
+
 try {
   const feedbackRoute = require('./routes/feedback');
   app.use('/api/feedback', feedbackRoute);
