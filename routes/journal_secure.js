@@ -158,6 +158,16 @@ router.get('/journal_secure/credits', (req, res) => {
     return res.status(status).json({ error: error.message });
   }
 });
+// Compat legacy: /journal_secure/create -> /journal_secure/entries
+router.post('/journal_secure/create', (req, res, next) => {
+  req.url = '/journal_secure/entries';
+  next();
+});
+// Compat: certains clients doublent le préfixe
+router.post('/journal_secure/journal_secure/create', (req, res, next) => {
+  req.url = '/journal_secure/entries';
+  next();
+});
 
 router.post(
   '/journal_secure/entries',
