@@ -30,6 +30,12 @@ app.use(cors({
 }));
 
 // ============================
+// JSON parser global 
+// ============================
+app.use(bodyParser.json({ limit: '1mb' }));
+app.use(bodyParser.urlencoded({ extended: true }));
+
+// ============================
 // IMPORT MISSING — ACCOUNT ROUTES
 // ============================
 const accountMe = require('./routes/account/account.me.js');
@@ -60,11 +66,6 @@ app.post(
   express.raw({ type: 'application/json' }),
   stripeWebhookHandler
 );
-
-// ============================
-// JSON parser global
-// ============================
-app.use(bodyParser.json({ limit: '1mb' }));
 
 // ============================
 // Disabled old auth

@@ -96,7 +96,7 @@ router.post('/carnet/login', loginRateLimit, async (req, res) => {
     const { error } = loginSchema.validate(req.body);
     if (error) return err(res, 400, error.details[0].message);
 
-    const { email, password } = req.body;
+    const { email, password } = req.body || {};
     const e = normEmail(email);
     
     const u = users.getByEmail(e);
