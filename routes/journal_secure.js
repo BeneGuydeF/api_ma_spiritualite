@@ -50,7 +50,7 @@ function auditJournalAccess(req, res, next) {
   next();
 }
 
-router.use(requireAuth, csrfProtection, auditJournalAccess);
+router.use('/journal_secure', requireAuth, csrfProtection, auditJournalAccess);
 
 const sanitize = (value) => (typeof value === 'string' ? value.replace(/\u200B/g, '').trim() : '');
 

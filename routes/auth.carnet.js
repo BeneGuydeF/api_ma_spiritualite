@@ -84,7 +84,7 @@ try {
   }
 });
 
-router.post('/login', loginRateLimit, (req, res, next) => {
+router.post('/login', (req, res, next) => {
   req.url = '/carnet/login';
   next();
 });
@@ -96,7 +96,10 @@ router.post('/carnet/login', loginRateLimit, async (req, res) => {
     const { error } = loginSchema.validate(req.body);
     if (error) return err(res, 400, error.details[0].message);
 
-    const { email, password } = req.body || {};
+   const { email, password } = req.body || {};
+if (!email || !password) {
+  return res.status(400).json({ error: "email et password requis" });
+}
     const e = normEmail(email);
     
     const u = users.getByEmail(e);
@@ -138,7 +141,7 @@ protectedRouter.get('/protected/ping', (req, res) => {
 });
 
 // Monter les routes protégées sous /api/auth
-router.use('/carnet', protectedRouter);
+router.use('/carnet/protected', protectedRouter);
 
 
 // 3) FORGOT INIT — question secrète ?

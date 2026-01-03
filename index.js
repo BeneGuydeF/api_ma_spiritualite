@@ -128,7 +128,7 @@ try {
 let journalSecureRoute = null;
 try {
   journalSecureRoute = require('./routes/journal_secure');
-  app.use('/api', journalSecureRoute);
+  app.use('/api', journalSecureRoute);;
   console.log('✅ Route /api/journal_secure chargée');
 } catch (e) {
   console.log('⚠️ Route journal_secure non disponible:', e.message);
