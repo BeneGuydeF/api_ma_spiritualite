@@ -74,8 +74,10 @@ try {
   const accountPassword = require('./routes/account/account.password.js');
   const accountCredits = require('./routes/account/account.credits.js');
   const accountPrivacy = require('./routes/account/account.privacy.js');
+   const accountSignup = require('./routes/auth.signup');
 
   app.use('/api/account', accountMe);
+    app.use('/api/account', accountSignup);
   app.use('/api/account', accountPassword);
   app.use('/api/account', accountCredits);
   app.use('/api/account', accountPrivacy);
