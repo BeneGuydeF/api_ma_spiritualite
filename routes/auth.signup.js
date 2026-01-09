@@ -55,7 +55,7 @@ router.post('/signup', async (req, res) => {
       normalized,
       hash,
       null,       // age_bucket
-      60,         // crédits gratuits
+      10,         // crédits gratuits
       null,       // encryptionSalt pour plus tard
       now,
       now
@@ -75,7 +75,7 @@ router.post('/signup', async (req, res) => {
       user: {
         id,
         email: normalized,
-        credits: 60,
+        credits: 10,
         ageBucket: null
       }
     });
