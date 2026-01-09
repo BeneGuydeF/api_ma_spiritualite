@@ -64,7 +64,7 @@ router.post('/signup', async (req, res) => {
     const id = result.lastInsertRowid;
 
     const token = jwt.sign(
-      { sub: id, email: normalized, scope: 'cloud' },
+       { id, sub: id, email: normalized, scope: 'cloud' },
       SECRET,
       { expiresIn: '7d' }
     );
