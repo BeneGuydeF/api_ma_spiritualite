@@ -150,7 +150,8 @@ Consigne : produire une réponse conforme aux contraintes ci-dessus.`
       ]
     });
 
-    const answer = completion.choices[0].message.content;
+    const answer = completion?.choices?.[0]?.message?.content || '';
+
 try {
       mainDb.prepare(`
         INSERT OR REPLACE INTO ia_cache (cache_key, response)
@@ -172,6 +173,10 @@ try {
 
   } catch (error) {
     console.error('Erreur IA :', error.response?.data || error.message);
+
+    if (error.message === 'Crédits insuffisants') {
+  return res.status(402).json({ error: 'Crédits insuffisants' });
+}
 
     return res.status(500).json({
       error: 'Impossible de générer la prière.',

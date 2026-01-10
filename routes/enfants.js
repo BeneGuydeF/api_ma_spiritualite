@@ -3,7 +3,8 @@ const OpenAI = require('openai');
 const router = express.Router();
 const db = require('../db/sqlite');
 const { generateHash } = require('../utils/crypto');
-
+const { requireAuth } = require('../middleware/auth');
+const credits = require('../models/credits.repo');
 console.log('✅ routes/enfants.js (IA + prompt original) chargé');
 
 // --- INIT OpenAI ---
@@ -21,7 +22,7 @@ router.get('/', (_req, res) => res.json({ ok: true, route: '/api/enfants' }));
 router.get('/health', (_req, res) => res.json({ ok: true, route: '/api/enfants/health' }));
 
 // --- POST /api/enfants (JSON + cache SQLite, sans streaming) ---
-router.post('/', async (req, res) => {
+router.post('/', requireAuth, async (req, res) => {
   const { prompt, ageRange, reference, theme } = req.body || {};
 
   if (!ageRange || !reference) {
@@ -58,7 +59,7 @@ router.post('/', async (req, res) => {
     .prepare('SELECT response FROM ia_cache WHERE cache_key = ?')
     .get(cacheKey);
 
-  if (row) {
+  if (row && row.response){
     return res.json({ response: row.response, from: 'cache' });
   }
 
@@ -90,9 +91,19 @@ router.post('/', async (req, res) => {
       VALUES (?, ?)
     `).run(cacheKey, content);
 
+await credits.deductCredits(
+  req.user.id,
+  1,
+  'Conversation Enfants – réponse complète'
+);
     return res.json({ response: content, from: 'ai' });
   } catch (err) {
     console.error('Erreur IA enfants:', err?.response?.data || err?.message || err);
+   
+    if (err?.message === 'Crédits insuffisants') {
+    return res.status(402).json({ error: 'Crédits insuffisants' });
+  }
+   
     return res.status(500).json({ error: 'Erreur lors de la génération IA' });
   }
 });
