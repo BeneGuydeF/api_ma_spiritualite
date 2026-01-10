@@ -6,6 +6,8 @@ const router = express.Router();
 const OpenAI = require('openai');
 const mainDb = require('../db/sqlite');
 const { generateHash } = require('../utils/crypto');
+const { requireAuth } = require('../middleware/auth');
+const credits = require('../models/credits.repo');
 
 // --- DB facultative (Bible Crampon + Blog) ---------------------------------
 let db = null;
@@ -69,7 +71,7 @@ router.get('/health', (_req, res) => {
 });
 
 // --- POST /api/priere --------------------------------------------------------
-router.post('/', async (req, res) => {
+router.post('/', requireAuth, async (req, res) => {
   const { prompt } = req.body || {};
 
   if (!prompt || !prompt.trim()) {
@@ -157,6 +159,13 @@ try {
     } catch (e) {
       console.warn('[priere] cache write failed:', e?.message || e);
     }
+
+// ✅ Déduction du crédit APRÈS succès (uniquement si IA)
+    await credits.deductCredits(
+      req.user.id,
+      1,
+      'Conversation Prière – réponse complète'
+    );
 
     return res.json({ response: answer, from: 'ai' });
 
