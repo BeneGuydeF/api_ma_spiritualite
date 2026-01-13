@@ -20,7 +20,7 @@ try {
 
   if (!userCols.includes('credits')) {
     console.log('➕ Ajout colonne credits à users...');
-    db.exec(`ALTER TABLE users ADD COLUMN credits INTEGER DEFAULT 5`);
+    db.exec(`ALTER TABLE users ADD COLUMN credits INTEGER DEFAULT 7`);
   }
 
   if (!userCols.includes('encryptionSalt')) {
@@ -114,7 +114,7 @@ try {
   }
 
   const usersWithoutCredits = db.prepare('SELECT id FROM users WHERE credits IS NULL OR credits = 0').all();
-  const updateCredits = db.prepare('UPDATE users SET credits = 5 WHERE id = ?');
+  const updateCredits = db.prepare('UPDATE users SET credits = 7 WHERE id = ?');
   for (const user of usersWithoutCredits) {
     updateCredits.run(user.id);
   }

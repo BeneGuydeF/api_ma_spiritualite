@@ -76,7 +76,7 @@ module.exports = {
       age_bucket: user.age_bucket ?? null,
       secretQuestion: user.secretQuestion ?? null,
       secretAnswerHash: user.secretAnswerHash ?? null,
-      credits: user.credits ?? 5, // crédits gratuits
+      credits: user.credits ?? 7, // crédits gratuits
       encryptionSalt: generateSalt(),
       createdAt: now,
       updatedAt: now

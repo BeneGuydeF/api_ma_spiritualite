@@ -27,7 +27,7 @@ CREATE TABLE IF NOT EXISTS users (
   age_bucket TEXT,
   theme TEXT DEFAULT 'system',
   analytics INTEGER DEFAULT 0,
-  credits INTEGER DEFAULT 0,
+  credits INTEGER DEFAULT 7,
   encryptionSalt TEXT,
   secretQuestion TEXT,
   secretAnswerHash TEXT,
