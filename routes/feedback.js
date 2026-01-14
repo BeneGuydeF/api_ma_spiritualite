@@ -3,8 +3,47 @@ const express = require('express');
 const { sensitiveRateLimit } = require('../middleware/auth');
 const Joi = require('joi');
 const db = require('../db/sqlite');
+const brevo = require('@getbrevo/brevo');
 
 const router = express.Router();
+
+async function sendFeedbackEmailBrevo({ id, type, title, description, email, name, createdAt }) {
+  const apiKey = process.env.BREVO_API_KEY;
+  const to = process.env.FEEDBACK_MAIL_TO;
+  const fromEmail = process.env.FEEDBACK_MAIL_FROM;
+  const fromName = process.env.FEEDBACK_MAIL_FROM_NAME || 'Ma Spiritualité';
+
+  if (!apiKey || !to || !fromEmail) return;
+
+  const apiInstance = new brevo.TransactionalEmailsApi();
+  apiInstance.setApiKey(brevo.TransactionalEmailsApiApiKeys.apiKey, apiKey);
+
+  const subject = `[Ma Spiritualité] Feedback #${id} — ${type} — ${title}`;
+
+  const textContent =
+`Nouveau feedback reçu
+
+ID: ${id}
+Date: ${createdAt}
+Type: ${type}
+Email: ${email || '(non fourni)'}
+Nom: ${name || '(non fourni)'}
+
+Titre:
+${title}
+
+Description:
+${description}
+`;
+
+  await apiInstance.sendTransacEmail({
+    sender: { email: fromEmail, name: fromName },
+    to: [{ email: to }],
+    subject,
+    textContent,
+  });
+}
+
 
 // Préparation des requêtes SQL
 const insertFeedback = db.prepare(`
@@ -196,6 +235,22 @@ router.post('/', sensitiveRateLimit, async (req, res) => {
       updatedAt: new Date().toISOString()
     });
 
+  // ✅ Envoi email (non bloquant)
+    try {
+      const createdAt = new Date().toISOString();
+      await sendFeedbackEmailBrevo({
+        id: Number(result.lastInsertRowid),
+        type,
+        title,
+        description,
+        email: email || currentUser?.email || null,
+        name: name || null,
+        createdAt,
+      });
+    } catch (e) {
+      console.log('⚠️ feedback brevo failed:', e?.message || e);
+    }
+      
     res.status(201).json({
       id: result.lastInsertRowid,
       message: 'Feedback créé avec succès. Merci pour votre contribution !',
