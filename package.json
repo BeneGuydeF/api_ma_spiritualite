@@ -15,6 +15,7 @@
     "audit:fix": "npm audit fix"
   },
   "dependencies": {
+    "@getbrevo/brevo": "^3.0.1",
     "@paypal/checkout-server-sdk": "^1.0.3",
     "axios": "^1.12.2",
     "bcryptjs": "^3.0.3",
