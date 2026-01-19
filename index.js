@@ -5,8 +5,16 @@ const bodyParser = require('body-parser');
 const cors = require('cors');
 const rateLimit = require('express-rate-limit');
 const listEndpoints = require('express-list-endpoints');
+const path = require('path');
 
 const app = express();
+
+// ============================
+// Pages statiques (App Store / Marketing)
+// ============================
+app.use('/assistance', express.static(path.join(__dirname, 'public/assistance')));
+app.use('/ma-spiritualite', express.static(path.join(__dirname, 'public/ma-spiritualite')));
+
 const port = process.env.PORT || 3013;
 
 console.log('🚀 Démarrage du serveur Ma Spiritualité...');
