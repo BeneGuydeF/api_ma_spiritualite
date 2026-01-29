@@ -14,6 +14,7 @@ const app = express();
 // ============================
 app.use('/assistance', express.static(path.join(__dirname, 'public/assistance')));
 app.use('/ma-spiritualite', express.static(path.join(__dirname, 'public/ma-spiritualite')));
+app.use('/confidentialite', express.static(path.join(__dirname, 'public/confidentialite')));
 
 const port = process.env.PORT || 3013;
 
